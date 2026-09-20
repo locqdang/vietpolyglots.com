@@ -14,7 +14,7 @@ const POLL_TIMEOUT_MS = 420_000; // hard cap so the UI never hangs
 const HISTORY_PAGE_SIZE = 12;
 
 const STATUS_LABELS = {
-  queued: 'Waiting for the GPU…',
+  queued: 'Waiting in queue…',
   processing: 'Generating your image…',
   completed: 'Done',
   failed: 'Failed',

@@ -67,7 +67,7 @@ export async function processGenerationJob(jobData) {
       }
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-    throw new GateError(504, 'Generation timed out — the GPU gate did not respond in time.');
+    throw new GateError(504, 'Generation timed out. Please try again.');
   } catch (error) {
     const message =
       error instanceof GateError
