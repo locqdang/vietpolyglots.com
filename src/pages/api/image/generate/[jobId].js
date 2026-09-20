@@ -1,6 +1,11 @@
 import { createApiLogger } from '../../../../lib/api-logging';
 import { readSession } from '../../../../lib/auth/session';
-import { getJobByOwner } from '../../../../lib/image-generate/jobs';
+import {
+  completeJob,
+  getJobByOwner,
+  getJobByPromptIdOwner,
+} from '../../../../lib/image-generate/jobs';
+import { getImageGenerationStatus } from '../../../../lib/image-generate/gate-client';
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -37,13 +42,43 @@ export default async function handler(req, res) {
   }
 
   const jobId = req.query?.jobId;
+  const promptId = typeof req.query?.promptId === 'string' ? req.query.promptId : '';
   if (!jobId || typeof jobId !== 'string') {
     return res.status(404).json({ error: 'Job not found' });
   }
 
-  const job = await getJobByOwner(jobId, email);
-  if (!job) {
+  let job = promptId
+    ? await getJobByPromptIdOwner(promptId, email)
+    : await getJobByOwner(jobId, email);
+  if (!job || job.jobId !== jobId) {
     return res.status(404).json({ error: 'Job not found' });
+  }
+
+  // Resumed clients use the gate prompt ID as the source of truth. This lets
+  // progress survive a browser refresh or an interrupted worker poll.
+  if (promptId && job.status !== 'completed') {
+    try {
+      const gateStatus = await getImageGenerationStatus(promptId);
+      if (gateStatus.status === 'completed') {
+        await completeJob(job.jobId, {
+          ...gateStatus,
+          seed: job.seed,
+          promptId,
+        });
+        job = await getJobByOwner(job.jobId, email);
+      } else if (gateStatus.status === 'queued' || gateStatus.status === 'processing') {
+        job = {
+          ...job,
+          status: gateStatus.status,
+          progress: {
+            label: gateStatus.status === 'queued' ? 'Queued' : 'Generating',
+            percent: gateStatus.status === 'queued' ? 20 : 60,
+          },
+        };
+      }
+    } catch {
+      // Keep the stored state available if the gate status probe is transiently unavailable.
+    }
   }
 
   const response = {

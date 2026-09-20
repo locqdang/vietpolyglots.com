@@ -54,45 +54,41 @@ async function fetchImageDataUrl(baseUrl, imageUrl) {
   return dataUrl;
 }
 
-/**
- * Submit a validated Chroma payload to the GPU gate and return the image.
- *
- * @param {object} payload - Validated Chroma payload from buildChromaPayload.
- * @returns {Promise<{ image: string, promptId: string, seed: number }>}
- * @throws {GateError} on any failure (status 4xx/5xx/timeout/unreachable).
- */
-export async function generateImage(payload) {
+export async function submitImageGeneration(payload) {
   const base = gateUrl();
-
   const response = await fetchWithTimeout(`${base}/api/chroma/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, async: true }),
   });
-
   const body = await parseGateJson(response);
-
-  if (!response.ok) {
-    const status = response.status;
-    const message =
-      body.detail ||
-      (status === 400 ? 'Invalid request to the GPU gate.' :
-       status === 502 ? 'The GPU gate could not reach ComfyUI.' :
-       status === 504 ? 'Generation timed out.' :
-       'Generation failed. Please try again.');
-    throw new GateError(status, message, body.error);
+  if (!response.ok || !body.prompt_id) {
+    throw new GateError(response.status || 502, body.detail || 'Unable to submit image generation.');
   }
+  return { promptId: body.prompt_id, seed: body.seed };
+}
 
+export async function getImageGenerationStatus(promptId) {
+  const base = gateUrl();
+  const response = await fetchWithTimeout(
+    `${base}/api/chroma/status/${encodeURIComponent(promptId)}`,
+    {},
+    10_000
+  );
+  const body = await parseGateJson(response);
+  if (!response.ok) {
+    throw new GateError(response.status, body.detail || 'Unable to read generation progress.');
+  }
+  if (body.status !== 'success') {
+    return { status: body.status, promptId: body.prompt_id || promptId };
+  }
   const images = Array.isArray(body.images) ? body.images : [];
-  if (images.length === 0) {
+  if (!images[0]?.url) {
     throw new GateError(500, 'The GPU gate returned no image. Please try again.');
   }
-
-  const dataUrl = await fetchImageDataUrl(base, images[0].url);
-
   return {
-    image: dataUrl,
-    promptId: body.prompt_id,
-    seed: body.seed,
+    status: 'completed',
+    promptId: body.prompt_id || promptId,
+    image: await fetchImageDataUrl(base, images[0].url),
   };
 }

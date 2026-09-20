@@ -25,6 +25,7 @@ export default function ImageGeneratePage() {
   const [loading, setLoading] = useState(false);
   const [statusLabel, setStatusLabel] = useState('');
   const [result, setResult] = useState(null); // { image, seed, promptId, jobId, prompt, negativePrompt }
+  const [activeJob, setActiveJob] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [retentionDays, setRetentionDays] = useState(30);
@@ -79,7 +80,7 @@ export default function ImageGeneratePage() {
     if (job.status === 'queued' || job.status === 'processing') {
       setLoading(true);
       setStatusLabel(STATUS_LABELS[job.status]);
-      await pollStatus(job.jobId);
+      await pollStatus(job.jobId, job.promptId);
       return;
     }
 
@@ -105,21 +106,19 @@ export default function ImageGeneratePage() {
     }
   }
 
-  async function retryJob(job) {
-    const savedPrompt = String(job?.prompt || '').trim();
-    const savedNegative = String(job?.negativePrompt || '');
-    setPrompt(savedPrompt);
-    setNegative(savedNegative);
-    if (!accepted) {
-      setClientError('Please confirm you understand the notice above before generating.');
-      return;
-    }
-    await submitGeneration(savedPrompt, savedNegative);
+  async function resumeJob(job) {
+    setClientError('');
+    setError('');
+    setResult(null);
+    setLoading(true);
+    setStatusLabel(STATUS_LABELS[job.status] || STATUS_LABELS.processing);
+    await pollStatus(job.jobId, job.promptId);
   }
 
-  async function pollStatus(jobId) {
+  async function pollStatus(jobId, initialPromptId = null) {
     const pollId = ++pollRef.current;
     const startedAt = Date.now();
+    let promptId = initialPromptId;
 
     while (true) {
       if (!mountedRef.current || pollId !== pollRef.current) return;
@@ -130,11 +129,18 @@ export default function ImageGeneratePage() {
       }
 
       try {
-        const res = await fetch(`/api/image/generate/${jobId}`, { credentials: 'same-origin' });
+        const statusUrl = promptId
+          ? `/api/image/generate/${jobId}?promptId=${encodeURIComponent(promptId)}`
+          : `/api/image/generate/${jobId}`;
+        const res = await fetch(statusUrl, { credentials: 'same-origin' });
         const data = await res.json().catch(() => null);
         if (!mountedRef.current || pollId !== pollRef.current) return;
 
         if (res.ok && data) {
+          if (data.promptId) {
+            promptId = data.promptId;
+            setActiveJob((current) => ({ ...(current || {}), jobId, promptId }));
+          }
           if (data.status === 'completed') {
             setResult({
               image: data.image,
@@ -186,6 +192,7 @@ export default function ImageGeneratePage() {
       const data = await response.json().catch(() => null);
 
       if (response.status === 202 && data?.jobId) {
+        setActiveJob({ jobId: data.jobId, promptId: null, status: 'queued' });
         await refreshHistory();
         await pollStatus(data.jobId);
         return;
@@ -317,9 +324,15 @@ export default function ImageGeneratePage() {
         {error ? (
           <div className="image-generate__errorbox" role="alert">
             <p>{error}</p>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={handleSubmit}>
-              Try again
-            </button>
+            {activeJob ? (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => resumeJob(activeJob)}
+              >
+                Resume
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -331,14 +344,6 @@ export default function ImageGeneratePage() {
               <span>Seed {result.seed}</span>
               {result.promptId ? <span>Prompt ID: {result.promptId}</span> : null}
             </figcaption>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={loading}
-              onClick={() => retryJob(result)}
-            >
-              Try again
-            </button>
           </figure>
         ) : null}
 
@@ -382,15 +387,16 @@ export default function ImageGeneratePage() {
                       >
                         Load
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      disabled={loading || !job.prompt}
-                      onClick={() => retryJob(job)}
-                    >
-                      Try again
-                    </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        disabled={loading || !job.promptId}
+                        onClick={() => resumeJob(job)}
+                      >
+                        Resume
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}

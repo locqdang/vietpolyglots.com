@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processGenerationJob } from '../../lib/image-generate/queue';
-import { generateImage, GateError } from '../../lib/image-generate/gate-client';
-import { markProcessing, completeJob, failJob } from '../../lib/image-generate/jobs';
+import {
+  submitImageGeneration,
+  getImageGenerationStatus,
+  GateError,
+} from '../../lib/image-generate/gate-client';
+import { markProcessing, attachPromptId, completeJob, failJob } from '../../lib/image-generate/jobs';
 
 vi.mock('../../lib/image-generate/gate-client', () => ({
-  generateImage: vi.fn(),
+  submitImageGeneration: vi.fn(),
+  getImageGenerationStatus: vi.fn(),
   GateError: class GateError extends Error {
     constructor(status, message, detail) {
       super(message);
@@ -17,6 +22,7 @@ vi.mock('../../lib/image-generate/gate-client', () => ({
 
 vi.mock('../../lib/image-generate/jobs', () => ({
   markProcessing: vi.fn(),
+  attachPromptId: vi.fn(),
   completeJob: vi.fn(),
   failJob: vi.fn(),
   createJob: vi.fn(),
@@ -25,39 +31,42 @@ vi.mock('../../lib/image-generate/jobs', () => ({
 }));
 
 describe('image-generate worker processor', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => vi.clearAllMocks());
 
-  it('marks processing, calls the gate, and completes the job on success', async () => {
-    generateImage.mockResolvedValue({
-      image: 'data:image/png;base64,AAAA',
-      promptId: 'p-123',
-      seed: 42,
-    });
+  it('persists promptId, polls by promptId, and completes on success', async () => {
+    submitImageGeneration.mockResolvedValue({ promptId: 'p-123', seed: 42 });
+    getImageGenerationStatus
+      .mockResolvedValueOnce({ status: 'processing', promptId: 'p-123' })
+      .mockResolvedValueOnce({
+        status: 'completed',
+        image: 'data:image/png;base64,AAAA',
+        promptId: 'p-123',
+      });
+
     const result = await processGenerationJob({ jobId: 'img_1', payload: { prompt: 'a cat' } });
 
     expect(markProcessing).toHaveBeenCalledWith('img_1');
-    expect(generateImage).toHaveBeenCalledWith({ prompt: 'a cat' });
+    expect(submitImageGeneration).toHaveBeenCalledWith({ prompt: 'a cat' });
+    expect(attachPromptId).toHaveBeenCalledWith('img_1', { promptId: 'p-123', seed: 42 });
+    expect(getImageGenerationStatus).toHaveBeenCalledWith('p-123');
     expect(completeJob).toHaveBeenCalledWith('img_1', {
+      status: 'completed',
       image: 'data:image/png;base64,AAAA',
       promptId: 'p-123',
       seed: 42,
     });
     expect(failJob).not.toHaveBeenCalled();
     expect(result.promptId).toBe('p-123');
-  });
+  }, 10_000);
 
-  it('records a user-safe error and re-throws when the gate fails', async () => {
-    generateImage.mockRejectedValue(
-      new GateError(504, 'Generation timed out — the GPU gate did not respond in time.', undefined)
+  it('records a user-safe error and re-throws when submission fails', async () => {
+    submitImageGeneration.mockRejectedValue(
+      new GateError(504, 'Generation timed out — the GPU gate did not respond in time.')
     );
 
     await expect(processGenerationJob({ jobId: 'img_2', payload: { prompt: 'a cat' } })).rejects.toBeInstanceOf(
       GateError
     );
-
-    expect(markProcessing).toHaveBeenCalledWith('img_2');
     expect(completeJob).not.toHaveBeenCalled();
     expect(failJob).toHaveBeenCalledWith(
       'img_2',
@@ -66,12 +75,8 @@ describe('image-generate worker processor', () => {
   });
 
   it('maps a non-GateError to a generic message and re-throws', async () => {
-    generateImage.mockRejectedValue(new Error('boom'));
-
-    await expect(processGenerationJob({ jobId: 'img_3', payload: { prompt: 'a cat' } })).rejects.toThrow(
-      'boom'
-    );
-
+    submitImageGeneration.mockRejectedValue(new Error('boom'));
+    await expect(processGenerationJob({ jobId: 'img_3', payload: { prompt: 'a cat' } })).rejects.toThrow('boom');
     expect(failJob).toHaveBeenCalledWith(
       'img_3',
       expect.objectContaining({ error: expect.stringMatching(/try again/) })

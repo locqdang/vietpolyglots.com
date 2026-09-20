@@ -96,6 +96,22 @@ export async function markProcessing(jobId) {
   );
 }
 
+export async function attachPromptId(jobId, { promptId, seed }) {
+  const col = await collection();
+  await col.updateOne(
+    { jobId },
+    {
+      $set: {
+        promptId,
+        seed: seed ?? null,
+        status: 'processing',
+        progress: { label: 'Generating', percent: 50 },
+        updatedAt: now(),
+      },
+    }
+  );
+}
+
 /**
  * Mark a job completed with its image result.
  */
@@ -199,6 +215,14 @@ export async function getJobByOwner(jobId, userEmail) {
 
   const history = await historyCollection();
   return history.findOne({ jobId, userEmail });
+}
+
+export async function getJobByPromptIdOwner(promptId, userEmail) {
+  const col = await collection();
+  const active = await col.findOne({ promptId, userEmail });
+  if (active) return active;
+  const history = await historyCollection();
+  return history.findOne({ promptId, userEmail });
 }
 
 /**

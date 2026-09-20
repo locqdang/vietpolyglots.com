@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import statusHandler from '../../pages/api/image/generate/[jobId]';
 import configHandler from '../../pages/api/image/generate/config';
 import { readSession } from '../../lib/auth/session';
-import { getJobByOwner } from '../../lib/image-generate/jobs';
+import { getJobByOwner, getJobByPromptIdOwner, completeJob } from '../../lib/image-generate/jobs';
+import { getImageGenerationStatus } from '../../lib/image-generate/gate-client';
 
 vi.mock('../../lib/auth/session', () => ({
   readSession: vi.fn(),
@@ -10,6 +11,12 @@ vi.mock('../../lib/auth/session', () => ({
 
 vi.mock('../../lib/image-generate/jobs', () => ({
   getJobByOwner: vi.fn(),
+  getJobByPromptIdOwner: vi.fn(),
+  completeJob: vi.fn(),
+}));
+
+vi.mock('../../lib/image-generate/gate-client', () => ({
+  getImageGenerationStatus: vi.fn(),
 }));
 
 function createMockRes() {
@@ -90,6 +97,26 @@ describe('GET /api/image/generate/[jobId] integration', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe('processing');
     expect(res.body.image).toBeUndefined();
+  });
+
+  it('uses promptId to resume live progress for the owning job', async () => {
+    readSession.mockReturnValue(AUTHED);
+    getJobByPromptIdOwner.mockResolvedValue({
+      jobId: 'img_1',
+      promptId: 'p-1',
+      status: 'failed',
+      seed: 42,
+    });
+    getImageGenerationStatus.mockResolvedValue({ status: 'processing', promptId: 'p-1' });
+    const res = createMockRes();
+    await statusHandler(
+      { method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } },
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(getImageGenerationStatus).toHaveBeenCalledWith('p-1');
+    expect(res.body.status).toBe('processing');
+    expect(res.body.promptId).toBe('p-1');
   });
 
   it('returns the error for a failed job', async () => {

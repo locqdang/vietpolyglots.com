@@ -7,12 +7,13 @@
 //
 // The queue is Redis-backed. REDIS_URL points at the LAN Redis (dedicated DB 1). The
 // gate (GPU_GATE_URL) is still the only thing that talks to ComfyUI — the worker
-// merely calls the same generateImage() the old synchronous route used.
+// submits asynchronously (async: true, returns prompt_id immediately) and then polls
+// the gate's status endpoint by prompt_id until the image is ready.
 
 import { Queue, Worker } from 'bullmq';
 import { logger, serializeError } from '../logger';
-import { generateImage, GateError } from './gate-client';
-import { markProcessing, completeJob, failJob } from './jobs';
+import { submitImageGeneration, getImageGenerationStatus, GateError } from './gate-client';
+import { markProcessing, attachPromptId, completeJob, failJob } from './jobs';
 
 const QUEUE_NAME = 'image-generate';
 
@@ -41,10 +42,25 @@ export async function processGenerationJob(jobData) {
   await markProcessing(jobId);
 
   try {
-    const result = await generateImage(payload);
-    await completeJob(jobId, result);
-    logger.info({ jobId, promptId: result.promptId }, 'image-gen worker: completed');
-    return result;
+    const submitted = await submitImageGeneration(payload);
+    await attachPromptId(jobId, submitted);
+    logger.info({ jobId, promptId: submitted.promptId }, 'image-gen worker: submitted');
+
+    const deadline = Date.now() + 180_000;
+    while (Date.now() < deadline) {
+      const status = await getImageGenerationStatus(submitted.promptId);
+      if (status.status === 'completed') {
+        const result = { ...status, seed: submitted.seed };
+        await completeJob(jobId, result);
+        logger.info({ jobId, promptId: submitted.promptId }, 'image-gen worker: completed');
+        return result;
+      }
+      if (status.status === 'failed') {
+        throw new GateError(500, 'Image generation failed. Please try again later.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    throw new GateError(504, 'Generation timed out — the GPU gate did not respond in time.');
   } catch (error) {
     const message =
       error instanceof GateError
