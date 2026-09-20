@@ -1317,3 +1317,130 @@ main {
     text-align: left;
   }
 }
+
+.image-generate {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 2rem var(--gap, 1rem) 3rem;
+}
+
+.image-generate__hero {
+  margin: 0 0 1.5rem;
+  text-align: center;
+}
+
+.image-generate__eyebrow {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.image-generate__hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.8rem, 5vw, 2.5rem);
+}
+
+.image-generate__intro {
+  margin: 0 auto;
+  max-width: 40rem;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.image-generate__card {
+  padding: 1.75rem;
+  border: 1px solid #dbe4ee;
+  border-radius: 1.25rem;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.image-generate__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.image-generate__label {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.image-generate__textarea {
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.image-generate__textarea:focus {
+  outline: 2px solid #bfdbfe;
+  outline-offset: 1px;
+  border-color: #60a5fa;
+}
+
+.image-generate__error {
+  margin: 0;
+  color: #dc2626;
+  font-size: 0.95rem;
+}
+
+.image-generate__status {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.8rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.image-generate__errorbox {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 0.8rem;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.image-generate__errorbox p {
+  margin: 0;
+}
+
+.image-generate__result {
+  margin: 1.5rem 0 0;
+}
+
+.image-generate__img {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  display: block;
+}
+
+.image-generate__meta {
+  margin-top: 0.6rem;
+  color: #64748b;
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .image-generate__card {
+    padding: 1.25rem;
+  }
+}

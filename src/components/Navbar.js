@@ -19,7 +19,10 @@ const NAVBAR = {
     {
       id: 'services',
       label: 'Services',
-      subItems: [{ id: 'services-haro', label: 'HARO', url: '/haro' }],
+      subItems: [
+        { id: 'services-haro', label: 'HARO', url: '/haro' },
+        { id: 'services-image-generate', label: 'Image Generate', url: '/image-generate' },
+      ],
     },
     { id: 'account', label: 'Account', subItems: [] },
   ],
