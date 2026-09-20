@@ -27,6 +27,7 @@ export default function ImageGeneratePage() {
   const [result, setResult] = useState(null); // { image, seed, promptId, jobId, prompt, negativePrompt }
   const [activeJob, setActiveJob] = useState(null);
   const [history, setHistory] = useState([]);
+  const [thumbnails, setThumbnails] = useState({});
   const [historyLoading, setHistoryLoading] = useState(true);
   const [retentionDays, setRetentionDays] = useState(30);
   const [rateLimit, setRateLimit] = useState(null);
@@ -34,6 +35,7 @@ export default function ImageGeneratePage() {
   const [clientError, setClientError] = useState('');
   const pollRef = useRef(0);
   const mountedRef = useRef(true);
+  const thumbRef = useRef(new Set());
 
   useEffect(() => {
     mountedRef.current = true;
@@ -74,6 +76,44 @@ export default function ImageGeneratePage() {
     }
   }
 
+  // Downscale a full image data URL to a small client-side thumbnail so the
+  // recent-generations list stays light. No server round trip, no new deps.
+  function ensureThumbnail(jobId, dataUrl) {
+    if (thumbRef.current.has(jobId) || typeof Image === 'undefined') return;
+    thumbRef.current.add(jobId);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const target = 160;
+        const scale = Math.min(1, target / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const thumb = canvas.toDataURL('image/jpeg', 0.75);
+        if (mountedRef.current) setThumbnails((current) => ({ ...current, [jobId]: thumb }));
+      } catch {
+        // Thumbnail is decorative; ignore canvas failures.
+      }
+    };
+    image.src = dataUrl;
+  }
+
+  useEffect(() => {
+    if (!history.length) return;
+    history
+      .filter((job) => job.status === 'completed')
+      .forEach((job) => {
+        fetch(`/api/image/generate/${job.jobId}`, { credentials: 'same-origin' })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (mountedRef.current && data?.image) ensureThumbnail(job.jobId, data.image);
+          })
+          .catch(() => {});
+      });
+  }, [history]);
+
   async function loadHistoryJob(job) {
     setClientError('');
     setError('');
@@ -101,6 +141,10 @@ export default function ImageGeneratePage() {
         prompt: data.prompt,
         negativePrompt: data.negativePrompt || '',
       });
+      // Loading an image also restores the prompt that created it.
+      if (data.prompt) setPrompt(data.prompt);
+      if (data.negativePrompt) setNegative(data.negativePrompt);
+      ensureThumbnail(data.jobId, data.image);
     } catch {
       setError('Could not load this saved image. Please try again.');
     }
@@ -159,6 +203,7 @@ export default function ImageGeneratePage() {
               prompt: data.prompt,
               negativePrompt: data.negativePrompt || '',
             });
+            if (data.image) ensureThumbnail(data.jobId, data.image);
             setStatusLabel('');
             setLoading(false);
             await refreshHistory();
@@ -385,6 +430,16 @@ export default function ImageGeneratePage() {
             <ul className="image-generate__history-list">
               {history.map((job) => (
                 <li key={job.jobId} className="image-generate__history-item">
+                  <div className="image-generate__history-thumb">
+                    {job.status === 'completed' && thumbnails[job.jobId] ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={thumbnails[job.jobId]}
+                        alt={`Thumbnail: ${job.prompt}`}
+                        className="image-generate__thumb-img"
+                      />
+                    ) : null}
+                  </div>
                   <div className="image-generate__history-copy">
                     <strong>{job.prompt}</strong>
                     <span>
