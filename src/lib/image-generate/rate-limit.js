@@ -100,3 +100,24 @@ export async function checkImageGenerateRateLimit(userEmail) {
     retryAfterSeconds: Math.max(1, Math.ceil(ttlMs / 1000)),
   };
 }
+
+/**
+ * Read the user's current rate-limit usage WITHOUT consuming an attempt.
+ * Powers the live quota display. Throws when Redis is unavailable so callers
+ * can degrade gracefully (the page keeps its last known / static quota line).
+ */
+export async function getRateLimitStatus(userEmail) {
+  const { max, windowSeconds } = getRateLimitConfig();
+  const client = await getReadyRedis();
+  const key = rateKey(userEmail);
+  const [rawCount, rawTtl] = await Promise.all([client.get(key), client.pttl(key)]);
+  const count = Math.max(0, Number(rawCount) || 0);
+  const ttlMs = Number(rawTtl); // -2 = key missing, -1 = no expiry, else ms left
+  return {
+    limit: max,
+    used: Math.min(count, max),
+    remaining: Math.max(0, max - count),
+    windowSeconds,
+    resetsInSeconds: ttlMs > 0 ? Math.ceil(ttlMs / 1000) : 0,
+  };
+}

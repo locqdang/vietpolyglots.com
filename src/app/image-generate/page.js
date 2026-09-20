@@ -24,6 +24,8 @@ export default function ImageGeneratePage() {
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusLabel, setStatusLabel] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [quota, setQuota] = useState(null);
   const [result, setResult] = useState(null); // { image, seed, promptId, jobId, prompt, negativePrompt }
   const [activeJob, setActiveJob] = useState(null);
   const [history, setHistory] = useState([]);
@@ -53,6 +55,7 @@ export default function ImageGeneratePage() {
       })
       .catch(() => {});
     refreshHistory();
+    refreshQuota();
     return () => {
       mountedRef.current = false;
     };
@@ -73,6 +76,19 @@ export default function ImageGeneratePage() {
       // History is secondary to generation; keep the form usable if it fails.
     } finally {
       if (mountedRef.current) setHistoryLoading(false);
+    }
+  }
+
+  // Read-only live quota for the owner. Never blocks the form: a failure (e.g.
+  // Redis blip, 503) keeps whatever quota the UI already shows.
+  async function refreshQuota() {
+    try {
+      const response = await fetch('/api/image/generate/quota', { credentials: 'same-origin' });
+      if (!response.ok) return;
+      const data = await response.json().catch(() => null);
+      if (mountedRef.current && data && typeof data.remaining === 'number') setQuota(data);
+    } catch {
+      // Quota is decorative; ignore failures.
     }
   }
 
@@ -120,6 +136,7 @@ export default function ImageGeneratePage() {
     if (job.status === 'queued' || job.status === 'processing') {
       setLoading(true);
       setStatusLabel(STATUS_LABELS[job.status]);
+      setProgressPercent(job.progress?.percent ?? 0);
       await pollStatus(job.jobId, job.promptId);
       return;
     }
@@ -165,6 +182,7 @@ export default function ImageGeneratePage() {
     setResult(null);
     setLoading(true);
     setStatusLabel(STATUS_LABELS[job.status] || STATUS_LABELS.processing);
+    setProgressPercent(job.progress?.percent ?? 0);
     await pollStatus(job.jobId, job.promptId);
   }
 
@@ -177,6 +195,7 @@ export default function ImageGeneratePage() {
       if (!mountedRef.current || pollId !== pollRef.current) return;
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
         setError('This is taking longer than expected. Please try again.');
+        setProgressPercent(0);
         setLoading(false);
         return;
       }
@@ -204,6 +223,7 @@ export default function ImageGeneratePage() {
               negativePrompt: data.negativePrompt || '',
             });
             if (data.image) ensureThumbnail(data.jobId, data.image);
+            setProgressPercent(100);
             setStatusLabel('');
             setLoading(false);
             await refreshHistory();
@@ -219,11 +239,18 @@ export default function ImageGeneratePage() {
               status: 'failed',
             }));
             setError(data.error || 'Image generation failed. Please try again.');
+            setProgressPercent(0);
             setStatusLabel('');
             setLoading(false);
             return;
           }
           setStatusLabel(STATUS_LABELS[data.status] || STATUS_LABELS.queued);
+          // Monotonic progress: the bar only ever moves forward, so an out-of-order
+          // poll (or a gate status that briefly lags) can never make it drop.
+          const reported = Number(data.progress?.percent);
+          if (Number.isFinite(reported) && reported >= 0) {
+            setProgressPercent((current) => Math.min(100, Math.max(current, reported)));
+          }
         }
       } catch {
         // Network blip while polling — keep going until the timeout.
@@ -252,10 +279,14 @@ export default function ImageGeneratePage() {
           replace_failed_job_id: replaceFailedJobId || undefined,
         }),
       });
+      // Every attempt (accepted or rate-limited) consumes the server counter, so
+      // refresh the live quota regardless of the outcome.
+      refreshQuota();
       const data = await response.json().catch(() => null);
 
       if (response.status === 202 && data?.jobId) {
         setActiveJob({ jobId: data.jobId, promptId: null, status: 'queued' });
+        setProgressPercent(0);
         await refreshHistory();
         await pollStatus(data.jobId);
         return;
@@ -367,17 +398,31 @@ export default function ImageGeneratePage() {
           </button>
           {rateLimit ? (
             <p className="image-generate__quota">
-              Limit: {rateLimit.max} generations every {Math.round(rateLimit.windowSeconds / 60)} minutes.
+              {quota
+                ? `Used ${quota.used} of ${quota.limit} generations${
+                    quota.resetsInSeconds > 0
+                      ? ` · resets in ${Math.max(1, Math.round(quota.resetsInSeconds / 60))} min`
+                      : ''
+                  }.`
+                : `Limit: ${rateLimit.max} generations every ${Math.round(
+                    rateLimit.windowSeconds / 60
+                  )} minutes.`}
             </p>
           ) : null}
         </form>
 
         {loading ? (
           <div className="image-generate__status" aria-live="polite">
-            <div className="image-generate__bar">
+            <div
+              className="image-generate__bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPercent}
+            >
               <div
                 className="image-generate__bar-fill"
-                style={{ width: statusLabel.startsWith('Generating') ? '60%' : '20%' }}
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
             <p>{statusLabel || 'Working…'}</p>

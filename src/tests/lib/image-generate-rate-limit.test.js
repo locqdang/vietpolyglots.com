@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkImageGenerateRateLimit, getRateLimitConfig } from '../../lib/image-generate/rate-limit';
+import {
+  checkImageGenerateRateLimit,
+  getRateLimitConfig,
+  getRateLimitStatus,
+} from '../../lib/image-generate/rate-limit';
 
 const redisMock = vi.hoisted(() => ({
   eval: vi.fn(),
+  get: vi.fn(),
+  pttl: vi.fn(),
   on: vi.fn(),
 }));
 
@@ -11,6 +17,8 @@ vi.mock('ioredis', () => ({
     constructor() {
       this.status = 'ready';
       this.eval = redisMock.eval;
+      this.get = redisMock.get;
+      this.pttl = redisMock.pttl;
       this.on = redisMock.on;
     }
   },
@@ -53,5 +61,42 @@ describe('image generation rate limit', () => {
     redisMock.eval.mockResolvedValue([16, 1_001]);
     const result = await checkImageGenerateRateLimit('loc@example.com');
     expect(result).toEqual({ allowed: false, limit: 15, remaining: 0, retryAfterSeconds: 2 });
+  });
+
+  it('reads current usage without consuming an attempt', async () => {
+    redisMock.get.mockResolvedValue('7');
+    redisMock.pttl.mockResolvedValue(2_400_000);
+    const result = await getRateLimitStatus('loc@example.com');
+    expect(result).toEqual({
+      limit: 15,
+      used: 7,
+      remaining: 8,
+      windowSeconds: 3600,
+      resetsInSeconds: 2400,
+    });
+    // Read-only: must not touch the INCR script.
+    expect(redisMock.eval).not.toHaveBeenCalled();
+    expect(redisMock.get.mock.calls[0][0]).not.toContain('loc@example.com');
+  });
+
+  it('reports a fresh window when no usage is stored', async () => {
+    redisMock.get.mockResolvedValue(null);
+    redisMock.pttl.mockResolvedValue(-2);
+    const result = await getRateLimitStatus('loc@example.com');
+    expect(result).toEqual({
+      limit: 15,
+      used: 0,
+      remaining: 15,
+      windowSeconds: 3600,
+      resetsInSeconds: 0,
+    });
+  });
+
+  it('clamps usage at the limit when the counter exceeds it', async () => {
+    redisMock.get.mockResolvedValue('21');
+    redisMock.pttl.mockResolvedValue(1000);
+    const result = await getRateLimitStatus('loc@example.com');
+    expect(result.used).toBe(15);
+    expect(result.remaining).toBe(0);
   });
 });

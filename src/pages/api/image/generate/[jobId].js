@@ -67,12 +67,23 @@ export default async function handler(req, res) {
         });
         job = await getJobByOwner(job.jobId, email);
       } else if (gateStatus.status === 'queued' || gateStatus.status === 'processing') {
+        // Never regress the job: once it has left the queue, a stale "queued" from
+        // the gate (ComfyUI has not picked the prompt up yet) must not pull the
+        // progress bar backwards, and the reported percent is the higher of the
+        // stored and gate values so the bar only ever moves forward.
+        const statusRank = { queued: 1, processing: 2 };
+        const nextStatus =
+          (statusRank[job.status] ?? 0) >= (statusRank[gateStatus.status] ?? 0)
+            ? job.status
+            : gateStatus.status;
+        const storedPercent = job.progress?.percent ?? 0;
+        const gatePercent = gateStatus.status === 'processing' ? 60 : 20;
         job = {
           ...job,
-          status: gateStatus.status,
+          status: nextStatus,
           progress: {
-            label: gateStatus.status === 'queued' ? 'Queued' : 'Generating',
-            percent: gateStatus.status === 'queued' ? 20 : 60,
+            label: nextStatus === 'queued' ? 'Queued' : 'Generating',
+            percent: Math.max(storedPercent, gatePercent),
           },
         };
       }

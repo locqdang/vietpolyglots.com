@@ -119,6 +119,46 @@ describe('GET /api/image/generate/[jobId] integration', () => {
     expect(res.body.promptId).toBe('p-1');
   });
 
+  it('never regresses progress when the gate reports a staler state', async () => {
+    readSession.mockReturnValue(AUTHED);
+    // Stored job is already generating at 50%, but the gate still shows "queued"
+    // (ComfyUI has not picked the prompt up yet). The response must not drop.
+    getJobByPromptIdOwner.mockResolvedValue({
+      jobId: 'img_1',
+      promptId: 'p-1',
+      status: 'processing',
+      progress: { label: 'Generating', percent: 50 },
+    });
+    getImageGenerationStatus.mockResolvedValue({ status: 'queued', promptId: 'p-1' });
+    const res = createMockRes();
+    await statusHandler(
+      { method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } },
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe('processing');
+    expect(res.body.progress.percent).toBe(50);
+  });
+
+  it('never reports a percent below the stored one for a live gate status', async () => {
+    readSession.mockReturnValue(AUTHED);
+    getJobByPromptIdOwner.mockResolvedValue({
+      jobId: 'img_1',
+      promptId: 'p-1',
+      status: 'queued',
+      progress: { label: 'Queued', percent: 20 },
+    });
+    getImageGenerationStatus.mockResolvedValue({ status: 'processing', promptId: 'p-1' });
+    const res = createMockRes();
+    await statusHandler(
+      { method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } },
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe('processing');
+    expect(res.body.progress.percent).toBe(60);
+  });
+
   it('returns the error for a failed job', async () => {
     readSession.mockReturnValue(AUTHED);
     getJobByOwner.mockResolvedValue({
