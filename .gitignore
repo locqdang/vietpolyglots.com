@@ -45,3 +45,4 @@ mongodb_data/
 
 # test results
 test-results/.last-run.json
+test-results/

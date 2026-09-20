@@ -24,7 +24,7 @@ type SessionResponse = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const privateRoutes = ['/video-meeting', '/haro'];
+const privateRoutes = ['/video-meeting', '/haro', '/image-generate'];
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
