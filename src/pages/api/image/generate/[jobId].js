@@ -48,14 +48,19 @@ export default async function handler(req, res) {
 
   const response = {
     jobId: job.jobId,
+    promptId: job.promptId ?? null,
+    prompt: job.prompt,
+    negativePrompt: job.negativePrompt ?? '',
     status: job.status,
     progress: job.progress ?? { label: job.status, percent: 0 },
+    createdAt: job.createdAt ?? null,
+    updatedAt: job.updatedAt ?? null,
+    expiresAt: job.expiresAt ?? null,
   };
 
   if (job.status === 'completed') {
     response.image = job.image;
     response.seed = job.seed;
-    response.promptId = job.promptId;
   } else if (job.status === 'failed') {
     response.error = job.error || 'Image generation failed. Please try again.';
   }

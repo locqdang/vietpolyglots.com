@@ -1,4 +1,5 @@
 import { getDefaultNegative } from '../../../../lib/image-generate/payload';
+import { getRateLimitConfig } from '../../../../lib/image-generate/rate-limit';
 
 /**
  * GET /api/image/generate/config
@@ -17,10 +18,15 @@ export default async function handler(req, res) {
 
   const width = Number(process.env.IMAGE_GEN_DEFAULT_WIDTH) || 1024;
   const height = Number(process.env.IMAGE_GEN_DEFAULT_HEIGHT) || 1024;
+  const retention = Number.parseInt(String(process.env.IMAGE_GEN_RETENTION_DAYS || ''), 10);
+  const retentionDays = Number.isSafeInteger(retention) && retention > 0 ? retention : 30;
+  const rateLimit = getRateLimitConfig();
 
   return res.status(200).json({
     defaultNegative: getDefaultNegative(),
     defaultWidth: width,
     defaultHeight: height,
+    retentionDays,
+    rateLimit,
   });
 }

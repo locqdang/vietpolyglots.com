@@ -86,6 +86,11 @@ The page and API surface clear, actionable feedback when a prompt is missing or 
 - **FR-012**: System MUST configure the GPU gate base URL from environment configuration so it can be changed without code edits.
 - **FR-013**: System MUST log generation activity with safe, non-sensitive context (no raw user email) consistent with existing API logging.
 - **FR-014**: User-facing page copy (labels, buttons, messages) MUST be in English. (User explicitly requested English-only UI for this feature, overriding the Constitution V Vietnamese default.) Technical build artifacts remain in English.
+- **FR-015**: System MUST enforce an atomic, Redis-backed rate limit per authenticated user before creating or enqueueing a generation. Limit/window values MUST be configurable; rejected requests MUST return `429` with `Retry-After` and MUST NOT create a Mongo or BullMQ job.
+- **FR-016**: System MUST persist the gate `prompt_id` with every completed generation and expose it only to the owning user.
+- **FR-017**: System MUST provide an owner-scoped recent-generation history showing prompt, `prompt_id`, status, seed, and timestamps without exposing another user's records.
+- **FR-018**: A user MUST be able to load a retained completed image from history and start a fresh generation using the retained prompt and negative prompt through a "Try again" action. A retry is a new generation and MUST count against the same rate limit.
+- **FR-019**: Generated job/result retention MUST be configurable and default to 30 days; history MUST communicate that retained images may expire.
 
 ### Key Entities _(include if feature involves data)_
 

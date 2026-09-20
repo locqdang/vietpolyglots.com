@@ -4,6 +4,7 @@ import { logger, serializeError } from '../../../lib/logger';
 import { buildChromaPayload } from '../../../lib/image-generate/payload';
 import { createJob, failJob } from '../../../lib/image-generate/jobs';
 import { enqueueGeneration } from '../../../lib/image-generate/queue';
+import { checkImageGenerateRateLimit } from '../../../lib/image-generate/rate-limit';
 
 function normalizeEmail(email) {
   return String(email || '')
@@ -43,6 +44,25 @@ export default async function handler(req, res) {
   if (!ok) {
     log.warn({ reason: 'invalid_request' }, 'Image generate invalid request');
     return res.status(400).json({ error });
+  }
+
+  let rateLimit;
+  try {
+    rateLimit = await checkImageGenerateRateLimit(email);
+  } catch (err) {
+    logger.error({ error: serializeError(err) }, 'Image generate: rate limiter unavailable');
+    return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+  }
+
+  res.setHeader('X-RateLimit-Limit', String(rateLimit.limit));
+  res.setHeader('X-RateLimit-Remaining', String(rateLimit.remaining));
+  if (!rateLimit.allowed) {
+    res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+    log.warn({ reason: 'rate_limited' }, 'Image generate rate limit exceeded');
+    return res.status(429).json({
+      error: `You have reached the image generation limit. Try again in ${rateLimit.retryAfterSeconds} seconds.`,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
   }
 
   // The job id is the Mongo handle and the BullMQ job id (one value, two systems).

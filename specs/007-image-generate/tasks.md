@@ -172,3 +172,14 @@ Single Next.js project. Source at `src/`, unit + integration tests under `src/te
 - The page and API are introduced in US1 and refined in US2/US3 (small feature → shared files); keep edits scoped per phase to avoid conflicts.
 - Stop at any checkpoint to validate the story independently.
 - Commit after each logical group (pause before commit/deploy per Constitution VI).
+
+---
+
+## Phase 7: Rate limiting, retained history, and retry
+
+- [ ] T025 Add unit coverage for atomic per-user Redis limiting and integration coverage for `429` + `Retry-After` with no job creation.
+- [ ] T026 Implement `src/lib/image-generate/rate-limit.js`; configure `IMAGE_GEN_RATE_LIMIT_MAX` and `IMAGE_GEN_RATE_LIMIT_WINDOW_SECONDS` in `.env.example`.
+- [ ] T027 Make job retention configurable through `IMAGE_GEN_RETENTION_DAYS` (default 30), retain `promptId`, and add owner-scoped recent-history queries.
+- [ ] T028 Add authenticated `GET /api/image/generate/history`; enrich owner-only job responses with retained prompt and negative prompt for retry.
+- [ ] T029 Add page history UI with Load and Try again controls; retries create fresh jobs and use the same rate limit.
+- [ ] T030 Run focused/full tests, lint, build, and authenticated runtime checks for rate limiting, history isolation, loading, and retry.

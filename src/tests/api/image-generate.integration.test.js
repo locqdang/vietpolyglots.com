@@ -3,6 +3,7 @@ import handler from '../../pages/api/image/generate';
 import { readSession } from '../../lib/auth/session';
 import { createJob, failJob } from '../../lib/image-generate/jobs';
 import { enqueueGeneration } from '../../lib/image-generate/queue';
+import { checkImageGenerateRateLimit } from '../../lib/image-generate/rate-limit';
 
 vi.mock('../../lib/auth/session', () => ({
   readSession: vi.fn(),
@@ -21,6 +22,10 @@ vi.mock('../../lib/image-generate/queue', () => ({
   enqueueGeneration: vi.fn(),
   ensureWorkerStarted: vi.fn(),
   getQueue: vi.fn(),
+}));
+
+vi.mock('../../lib/image-generate/rate-limit', () => ({
+  checkImageGenerateRateLimit: vi.fn(),
 }));
 
 function createMockRes() {
@@ -49,6 +54,12 @@ describe('POST /api/image/generate integration', () => {
     vi.clearAllMocks();
     createJob.mockResolvedValue({ jobId: 'img_test' });
     enqueueGeneration.mockResolvedValue({ jobId: 'img_test' });
+    checkImageGenerateRateLimit.mockResolvedValue({
+      allowed: true,
+      limit: 5,
+      remaining: 4,
+      retryAfterSeconds: 3600,
+    });
   });
 
   it('returns 405 for non-POST methods', async () => {
@@ -113,6 +124,34 @@ describe('POST /api/image/generate integration', () => {
         }),
       })
     );
+  });
+
+  it('returns 429 with Retry-After and creates no job when over quota', async () => {
+    readSession.mockReturnValue(AUTHED);
+    checkImageGenerateRateLimit.mockResolvedValue({
+      allowed: false,
+      limit: 5,
+      remaining: 0,
+      retryAfterSeconds: 90,
+    });
+    const req = { method: 'POST', body: { prompt: 'a cat' } };
+    const res = createMockRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(429);
+    expect(res.headers['Retry-After']).toBe('90');
+    expect(res.body.retryAfterSeconds).toBe(90);
+    expect(createJob).not.toHaveBeenCalled();
+    expect(enqueueGeneration).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the rate limiter is unavailable', async () => {
+    readSession.mockReturnValue(AUTHED);
+    checkImageGenerateRateLimit.mockRejectedValue(new Error('redis down'));
+    const req = { method: 'POST', body: { prompt: 'a cat' } };
+    const res = createMockRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(503);
+    expect(createJob).not.toHaveBeenCalled();
   });
 
   it('returns 503 when the job store is unavailable', async () => {
