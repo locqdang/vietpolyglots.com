@@ -201,6 +201,9 @@ export default function ImageGeneratePage() {
     setClientError('');
     setError('');
     if (job.status === 'queued' || job.status === 'processing') {
+      // Resuming an in-flight job takes over the single poll, so it's only
+      // offered when nothing else is running (the button is disabled otherwise).
+      if (loading) return;
       setLoading(true);
       setStatusLabel(STATUS_LABELS[job.status]);
       setStage(job.status === 'processing' ? 'processing' : 'queued');
@@ -569,7 +572,6 @@ export default function ImageGeneratePage() {
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
-                          disabled={loading}
                           onClick={() => loadHistoryJob(job)}
                         >
                           Load
