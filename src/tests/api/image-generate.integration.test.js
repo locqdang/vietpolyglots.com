@@ -1,22 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import handler from '../../pages/api/image/generate';
-import { generateImage, GateError } from '../../lib/image-generate/gate-client';
 import { readSession } from '../../lib/auth/session';
-
-vi.mock('../../lib/image-generate/gate-client', () => ({
-  generateImage: vi.fn(),
-  GateError: class GateError extends Error {
-    constructor(status, message, detail) {
-      super(message);
-      this.name = 'GateError';
-      this.status = status;
-      this.detail = detail;
-    }
-  },
-}));
+import { createJob, failJob } from '../../lib/image-generate/jobs';
+import { enqueueGeneration } from '../../lib/image-generate/queue';
 
 vi.mock('../../lib/auth/session', () => ({
   readSession: vi.fn(),
+}));
+
+vi.mock('../../lib/image-generate/jobs', () => ({
+  createJob: vi.fn(),
+  failJob: vi.fn(),
+  getJob: vi.fn(),
+  getJobByOwner: vi.fn(),
+  markProcessing: vi.fn(),
+  completeJob: vi.fn(),
+}));
+
+vi.mock('../../lib/image-generate/queue', () => ({
+  enqueueGeneration: vi.fn(),
+  ensureWorkerStarted: vi.fn(),
+  getQueue: vi.fn(),
 }));
 
 function createMockRes() {
@@ -43,6 +47,8 @@ const AUTHED = { user: { id: 'u1', email: 'loc@dang.com', name: 'Lockie' } };
 describe('POST /api/image/generate integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createJob.mockResolvedValue({ jobId: 'img_test' });
+    enqueueGeneration.mockResolvedValue({ jobId: 'img_test' });
   });
 
   it('returns 405 for non-POST methods', async () => {
@@ -50,85 +56,83 @@ describe('POST /api/image/generate integration', () => {
     const res = createMockRes();
     await handler(req, res);
     expect(res.statusCode).toBe(405);
-    expect(generateImage).not.toHaveBeenCalled();
+    expect(createJob).not.toHaveBeenCalled();
+    expect(enqueueGeneration).not.toHaveBeenCalled();
   });
 
-  it('returns 401 without a session and does not call the gate', async () => {
+  it('returns 401 without a session and does not create a job', async () => {
     readSession.mockReturnValue(null);
     const req = { method: 'POST', body: { prompt: 'a cat' } };
     const res = createMockRes();
     await handler(req, res);
     expect(res.statusCode).toBe(401);
-    expect(generateImage).not.toHaveBeenCalled();
+    expect(createJob).not.toHaveBeenCalled();
+    expect(enqueueGeneration).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for an empty prompt (no gate call) with a session', async () => {
+  it('returns 400 for an empty prompt (no job created)', async () => {
     readSession.mockReturnValue(AUTHED);
     const req = { method: 'POST', body: { prompt: '   ' } };
     const res = createMockRes();
     await handler(req, res);
     expect(res.statusCode).toBe(400);
     expect(res.body.error).toMatch(/prompt/);
-    expect(generateImage).not.toHaveBeenCalled();
+    expect(createJob).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for an invalid dimension (no gate call)', async () => {
+  it('returns 400 for an invalid dimension (no job created)', async () => {
     readSession.mockReturnValue(AUTHED);
     const req = { method: 'POST', body: { prompt: 'a cat', width: 300 } };
     const res = createMockRes();
     await handler(req, res);
     expect(res.statusCode).toBe(400);
-    expect(generateImage).not.toHaveBeenCalled();
+    expect(createJob).not.toHaveBeenCalled();
   });
 
-  it('returns 200 with image data URL when the gate succeeds', async () => {
+  it('returns 202 with a jobId when the job is queued', async () => {
     readSession.mockReturnValue(AUTHED);
-    generateImage.mockResolvedValue({
-      image: 'data:image/png;base64,AAAA',
-      promptId: 'p-123',
-      seed: 42,
-    });
     const req = { method: 'POST', body: { prompt: 'a cat' } };
     const res = createMockRes();
     await handler(req, res);
-    // Validated payload: prompt + default width/height (buildChromaPayload applies defaults).
-    expect(generateImage).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: 'a cat', width: expect.any(Number), height: expect.any(Number) })
+    expect(res.statusCode).toBe(202);
+    expect(res.body.jobId).toBeTruthy();
+    // The job is recorded with the owning user and the validated prompt.
+    expect(createJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userEmail: 'loc@dang.com',
+        prompt: 'a cat',
+      })
     );
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({
-      image: 'data:image/png;base64,AAAA',
-      promptId: 'p-123',
-      seed: 42,
-    });
+    // The queue receives the validated payload (prompt + default size).
+    expect(enqueueGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          prompt: 'a cat',
+          width: expect.any(Number),
+          height: expect.any(Number),
+        }),
+      })
+    );
   });
 
-  it('maps a 504 GateError to a 504 response with a user-safe message', async () => {
+  it('returns 503 when the job store is unavailable', async () => {
     readSession.mockReturnValue(AUTHED);
-    generateImage.mockRejectedValue(new GateError(504, 'Generation timed out — the GPU gate did not respond in time.', undefined));
+    createJob.mockRejectedValue(new Error('mongo down'));
     const req = { method: 'POST', body: { prompt: 'a cat' } };
     const res = createMockRes();
     await handler(req, res);
-    expect(res.statusCode).toBe(504);
-    expect(res.body.error).toMatch(/timed out/);
+    expect(res.statusCode).toBe(503);
+    expect(enqueueGeneration).not.toHaveBeenCalled();
   });
 
-  it('maps a 502 GateError to a 502 response', async () => {
+  it('returns 503 and marks the job failed when enqueueing fails', async () => {
     readSession.mockReturnValue(AUTHED);
-    generateImage.mockRejectedValue(new GateError(502, 'Unable to reach the GPU gate. Please try again later.', undefined));
+    enqueueGeneration.mockRejectedValue(new Error('redis down'));
     const req = { method: 'POST', body: { prompt: 'a cat' } };
     const res = createMockRes();
     await handler(req, res);
-    expect(res.statusCode).toBe(502);
-  });
-
-  it('maps an unexpected error to a 502 with a generic message', async () => {
-    readSession.mockReturnValue(AUTHED);
-    generateImage.mockRejectedValue(new Error('boom'));
-    const req = { method: 'POST', body: { prompt: 'a cat' } };
-    const res = createMockRes();
-    await handler(req, res);
-    expect(res.statusCode).toBe(502);
-    expect(res.body.error).toMatch(/try again/);
+    expect(res.statusCode).toBe(503);
+    expect(createJob).toHaveBeenCalled();
+    expect(failJob).toHaveBeenCalled();
   });
 });

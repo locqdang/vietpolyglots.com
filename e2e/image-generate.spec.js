@@ -20,26 +20,45 @@ test.describe('Services → Image Generate', () => {
     await expect(imageLink).toBeVisible();
   });
 
-  test('renders the form for a signed-in user and reaches a terminal state after submit', async ({
-    page,
-    request,
-  }) => {
+  test('blocks submission until the legal notice is accepted', async ({ page, request }) => {
     await signInWithMagicLink(page, request, {
       email: 'e2e-image-generate@example.com',
       redirectPath: '/image-generate',
     });
 
-    await expect(
-      page.getByRole('heading', { name: 'Create an image from a description' })
-    ).toBeVisible();
+    const prompt = page.getByLabel('Describe your image');
+    const generateButton = page.getByRole('button', { name: 'Generate image' });
+    const consent = page.getByLabel(/I have read and agree/);
+    await expect(prompt).toBeVisible();
+    await expect(consent).toBeVisible();
+
+    await prompt.fill('A watercolor red dragon');
+    await generateButton.click();
+
+    // No consent → blocked client-side, no API call, no generation.
+    await expect(page.getByText(/confirm you understand the notice/i)).toBeVisible();
+    await expect(page.locator('.image-generate__bar')).toHaveCount(0);
+  });
+
+  test('reaches a terminal state after submit once consent is given', async ({ page, request }) => {
+    await signInWithMagicLink(page, request, {
+      email: 'e2e-image-generate@example.com',
+      redirectPath: '/image-generate',
+    });
 
     const prompt = page.getByLabel('Describe your image');
     const generateButton = page.getByRole('button', { name: 'Generate image' });
+    const consent = page.getByLabel(/I have read and agree/);
     await expect(prompt).toBeVisible();
-    await expect(generateButton).toBeEnabled();
+    await expect(consent).toBeVisible();
 
     await prompt.fill('A watercolor red dragon flying over misty mountains at sunrise');
+    await consent.check();
     await generateButton.click();
+
+    // The job is queued, then the page polls. The progress bar must appear while
+    // in flight.
+    await expect(page.locator('.image-generate__bar')).toBeVisible();
 
     // The generation runs on the GPU gate. Whether the gate is up or down, the page
     // must reach a terminal state (image rendered, or a clear error) without hanging.

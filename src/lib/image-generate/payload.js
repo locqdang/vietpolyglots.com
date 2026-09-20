@@ -16,6 +16,16 @@ function envDefault(name, fallback) {
 const DEFAULT_WIDTH = envDefault('IMAGE_GEN_DEFAULT_WIDTH', 1024);
 const DEFAULT_HEIGHT = envDefault('IMAGE_GEN_DEFAULT_HEIGHT', 1024);
 
+/**
+ * Default negative prompt, read at call time so tests can override the env
+ * and the config endpoint can share the exact same source of truth.
+ * Empty string when unset (i.e. no default negative prompt).
+ */
+export function getDefaultNegative() {
+  const raw = process.env.IMAGE_GEN_DEFAULT_NEGATIVE;
+  return typeof raw === 'string' ? raw : '';
+}
+
 function isInt(value) {
   return typeof value === 'number' && Number.isInteger(value);
 }
@@ -57,7 +67,15 @@ export function buildChromaPayload(request) {
 
   const payload = { prompt: prompt.trim() };
 
-  if (values.negative_prompt !== undefined) {
+  // Negative prompt: if the user omits it, fall back to the configured default
+  // (may be empty). An explicit value — including "" (user cleared the default)
+  // — is used as-is.
+  if (values.negative_prompt === undefined) {
+    const defaultNegative = getDefaultNegative();
+    if (defaultNegative.length > 0) {
+      payload.negative_prompt = defaultNegative;
+    }
+  } else {
     if (typeof values.negative_prompt !== 'string' || values.negative_prompt.length > MAX_NEGATIVE) {
       return { ok: false, error: 'negative_prompt must be a string of at most 10000 characters' };
     }

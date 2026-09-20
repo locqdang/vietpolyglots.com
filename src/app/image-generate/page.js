@@ -1,16 +1,90 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const MAX_PROMPT = 10_000;
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 180_000; // hard cap so the UI never hangs
+
+const STATUS_LABELS = {
+  queued: 'In queue…',
+  processing: 'Generating your image…',
+  completed: 'Done',
+  failed: 'Failed',
+};
 
 export default function ImageGeneratePage() {
   const [prompt, setPrompt] = useState('');
-  const [result, setResult] = useState(null); // { image, promptId, seed }
+  const [negative, setNegative] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [statusLabel, setStatusLabel] = useState('');
+  const [result, setResult] = useState(null); // { image, seed }
   const [error, setError] = useState('');
   const [clientError, setClientError] = useState('');
-  const reqIdRef = useRef(0);
+  const pollRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    // Pre-fill the negative prompt with the server default (secret-free endpoint).
+    fetch('/api/image/generate/config', { credentials: 'same-origin' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (mountedRef.current && data?.defaultNegative) {
+          setNegative((current) => current || data.defaultNegative);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  function stopPolling() {
+    pollRef.current += 1;
+  }
+
+  async function pollStatus(jobId) {
+    const pollId = ++pollRef.current;
+    const startedAt = Date.now();
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (!mountedRef.current || pollId !== pollRef.current) return;
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        setError('This is taking longer than expected. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/image/generate/${jobId}`, { credentials: 'same-origin' });
+        const data = await res.json().catch(() => null);
+        if (!mountedRef.current || pollId !== pollRef.current) return;
+
+        if (res.ok && data) {
+          if (data.status === 'completed') {
+            setResult({ image: data.image, seed: data.seed });
+            setStatusLabel('');
+            setLoading(false);
+            return;
+          }
+          if (data.status === 'failed') {
+            setError(data.error || 'Image generation failed. Please try again.');
+            setStatusLabel('');
+            setLoading(false);
+            return;
+          }
+          setStatusLabel(STATUS_LABELS[data.status] || STATUS_LABELS.queued);
+        }
+      } catch {
+        // Network blip while polling — keep going until the timeout.
+      }
+
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -29,32 +103,34 @@ export default function ImageGeneratePage() {
       setClientError('Your prompt is too long. Keep it under 10,000 characters.');
       return;
     }
+    if (!accepted) {
+      setClientError('Please confirm you understand the notice above before generating.');
+      return;
+    }
 
-    const reqId = ++reqIdRef.current;
     setLoading(true);
+    setStatusLabel(STATUS_LABELS.queued);
+
     try {
       const response = await fetch('/api/image/generate', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: trimmed }),
+        body: JSON.stringify({ prompt: trimmed, negative_prompt: negative.trim() || undefined }),
       });
       const data = await response.json().catch(() => null);
-      if (reqId !== reqIdRef.current) return; // stale response, a newer request superseded it
 
-      if (response.ok && data?.image) {
-        setResult({ image: data.image, promptId: data.promptId, seed: data.seed });
-      } else {
-        setError(data?.error || 'Something went wrong while generating the image. Please try again.');
+      if (response.status === 202 && data?.jobId) {
+        await pollStatus(data.jobId);
+        return;
       }
+
+      // Terminal client-side error (4xx) — no polling.
+      setError(data?.error || 'Something went wrong while generating the image. Please try again.');
+      setLoading(false);
     } catch {
-      if (reqId === reqIdRef.current) {
-        setError('Could not reach the server. Please check your connection and try again.');
-      }
-    } finally {
-      if (reqId === reqIdRef.current) {
-        setLoading(false);
-      }
+      setError('Could not reach the server. Please check your connection and try again.');
+      setLoading(false);
     }
   }
 
@@ -69,6 +145,28 @@ export default function ImageGeneratePage() {
       </section>
 
       <section className="image-generate__card">
+        <div className="image-generate__notice" role="note">
+          <h2 className="image-generate__notice-title">Please read before generating</h2>
+          <p>
+            Images are created by an AI model and are provided for personal use only. You are
+            solely responsible for how you use any image you generate. The site owner provides this
+            service “as is”, without warranties of any kind, and is not responsible for the content
+            of generated images or for any use you make of them. Do not generate images of real,
+            identifiable people, or content that is illegal, infringes another&rsquo;s rights, or
+            violates applicable law or this site&rsquo;s terms of service. By checking the box below
+            you confirm you have read and agree to these terms.
+          </p>
+          <label className="image-generate__consent">
+            <input
+              type="checkbox"
+              checked={accepted}
+              disabled={loading}
+              onChange={(event) => setAccepted(event.target.checked)}
+            />
+            <span>I have read and agree to the notice above.</span>
+          </label>
+        </div>
+
         <form className="image-generate__form" onSubmit={handleSubmit} noValidate>
           <label className="image-generate__label" htmlFor="prompt">
             Describe your image
@@ -84,6 +182,25 @@ export default function ImageGeneratePage() {
             disabled={loading}
             onChange={(event) => setPrompt(event.target.value)}
           />
+
+          <details className="image-generate__advanced">
+            <summary className="image-generate__advanced-summary">Options (negative prompt)</summary>
+            <label className="image-generate__label" htmlFor="negative">
+              Things to avoid (optional)
+            </label>
+            <textarea
+              id="negative"
+              name="negative"
+              className="image-generate__textarea image-generate__textarea--sm"
+              rows={2}
+              maxLength={10_000}
+              placeholder="e.g. blurry, watermark, text"
+              value={negative}
+              disabled={loading}
+              onChange={(event) => setNegative(event.target.value)}
+            />
+          </details>
+
           {clientError ? <p className="image-generate__error">{clientError}</p> : null}
 
           <button type="submit" className="btn" disabled={loading}>
@@ -91,7 +208,18 @@ export default function ImageGeneratePage() {
           </button>
         </form>
 
-        {loading ? <div className="image-generate__status" aria-live="polite">Generating your image, this can take a moment…</div> : null}
+        {loading ? (
+          <div className="image-generate__status" aria-live="polite">
+            <div className="image-generate__bar">
+              <div
+                className="image-generate__bar-fill"
+                style={{ width: statusLabel.startsWith('Generating') ? '60%' : '20%' }}
+              />
+            </div>
+            <p>{statusLabel || 'Working…'}</p>
+          </div>
+        ) : null}
+
         {error ? (
           <div className="image-generate__errorbox" role="alert">
             <p>{error}</p>

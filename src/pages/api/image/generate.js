@@ -1,8 +1,9 @@
 import { createApiLogger } from '../../../lib/api-logging';
 import { readSession } from '../../../lib/auth/session';
-import { serializeError } from '../../../lib/logger';
+import { logger, serializeError } from '../../../lib/logger';
 import { buildChromaPayload } from '../../../lib/image-generate/payload';
-import { generateImage, GateError } from '../../../lib/image-generate/gate-client';
+import { createJob, failJob } from '../../../lib/image-generate/jobs';
+import { enqueueGeneration } from '../../../lib/image-generate/queue';
 
 function normalizeEmail(email) {
   return String(email || '')
@@ -25,14 +26,9 @@ export default async function handler(req, res) {
   }
 
   const session = readSession(req);
-  if (!session?.user?.email) {
-    baseLog.warn({ reason: 'missing_token' }, 'Image generate auth failure');
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const email = normalizeEmail(session.user.email);
+  const email = normalizeEmail(session?.user?.email);
   if (!email) {
-    baseLog.warn({ reason: 'invalid_token_payload' }, 'Image generate auth failure');
+    baseLog.warn({ reason: 'missing_token' }, 'Image generate auth failure');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -49,16 +45,34 @@ export default async function handler(req, res) {
     return res.status(400).json({ error });
   }
 
+  // The job id is the Mongo handle and the BullMQ job id (one value, two systems).
+  const jobId = `img_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
   try {
-    const result = await generateImage(payload);
-    log.info({ promptId: result.promptId, seed: result.seed }, 'Image generate success');
-    return res.status(200).json(result);
-  } catch (error) {
-    if (error instanceof GateError) {
-      log.warn({ status: error.status, detail: error.detail }, 'Image generate gate error');
-      return res.status(error.status).json({ error: error.message });
-    }
-    log.error({ error: serializeError(error) }, 'Image generate unexpected error');
-    return res.status(502).json({ error: 'Image generation failed. Please try again later.' });
+    await createJob({
+      jobId,
+      userEmail: email,
+      prompt: payload.prompt,
+      negativePrompt: payload.negative_prompt ?? null,
+      width: payload.width,
+      height: payload.height,
+    });
+  } catch (err) {
+    logger.error({ error: serializeError(err) }, 'Image generate: job store unavailable');
+    return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
   }
+
+  try {
+    await enqueueGeneration({ jobId, payload });
+  } catch (err) {
+    logger.error({ error: serializeError(err) }, 'Image generate: enqueue failed');
+    // The job is already recorded; mark it failed so polling does not hang on 'queued'.
+    try {
+      await failJob(jobId, { error: 'Service temporarily unavailable. Please try again later.' });
+    } catch {}
+    return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+  }
+
+  log.info({ jobId }, 'Image generate: queued');
+  return res.status(202).json({ jobId });
 }

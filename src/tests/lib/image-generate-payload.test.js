@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildChromaPayload } from '../../lib/image-generate/payload';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { buildChromaPayload, getDefaultNegative } from '../../lib/image-generate/payload';
 
 describe('buildChromaPayload', () => {
   it('builds a minimal payload with the prompt and default size', () => {
@@ -95,5 +95,60 @@ describe('buildChromaPayload', () => {
   it('rejects boolean / non-numeric dimension values', () => {
     expect(buildChromaPayload({ prompt: 'x', width: true }).ok).toBe(false);
     expect(buildChromaPayload({ prompt: 'x', steps: '10' }).ok).toBe(false);
+  });
+});
+
+describe('default negative prompt', () => {
+  const original = process.env.IMAGE_GEN_DEFAULT_NEGATIVE;
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.IMAGE_GEN_DEFAULT_NEGATIVE;
+    } else {
+      process.env.IMAGE_GEN_DEFAULT_NEGATIVE = original;
+    }
+  });
+
+  it('reads the default negative prompt from env', () => {
+    process.env.IMAGE_GEN_DEFAULT_NEGATIVE = 'blurry, watermark';
+    expect(getDefaultNegative()).toBe('blurry, watermark');
+  });
+
+  it('returns an empty string when the env var is unset', () => {
+    delete process.env.IMAGE_GEN_DEFAULT_NEGATIVE;
+    expect(getDefaultNegative()).toBe('');
+  });
+
+  it('applies the default negative prompt when the user omits it', () => {
+    process.env.IMAGE_GEN_DEFAULT_NEGATIVE = 'blurry, watermark';
+    const result = buildChromaPayload({ prompt: 'a cat', width: 512, height: 512 });
+    expect(result.ok).toBe(true);
+    expect(result.payload.negative_prompt).toBe('blurry, watermark');
+  });
+
+  it('sends no negative prompt when the default is empty and the user omits it', () => {
+    delete process.env.IMAGE_GEN_DEFAULT_NEGATIVE;
+    const result = buildChromaPayload({ prompt: 'a cat', width: 512, height: 512 });
+    expect(result.ok).toBe(true);
+    expect(result.payload).not.toHaveProperty('negative_prompt');
+  });
+
+  it('lets the user override the default negative prompt', () => {
+    process.env.IMAGE_GEN_DEFAULT_NEGATIVE = 'blurry, watermark';
+    const result = buildChromaPayload({
+      prompt: 'a cat',
+      width: 512,
+      height: 512,
+      negative_prompt: 'my custom negative',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.payload.negative_prompt).toBe('my custom negative');
+  });
+
+  it('respects an explicit empty negative prompt (user cleared the default)', () => {
+    process.env.IMAGE_GEN_DEFAULT_NEGATIVE = 'blurry, watermark';
+    const result = buildChromaPayload({ prompt: 'a cat', width: 512, height: 512, negative_prompt: '' });
+    expect(result.ok).toBe(true);
+    expect(result.payload.negative_prompt).toBe('');
   });
 });
