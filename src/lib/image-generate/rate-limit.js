@@ -55,10 +55,7 @@ async function getReadyRedis() {
   const client = getRedis();
   if (client.status === 'ready') return client;
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error('Redis not ready in time')),
-      3000
-    );
+    const timer = setTimeout(() => reject(new Error('Redis not ready in time')), 3000);
     client.once('ready', () => {
       clearTimeout(timer);
       resolve();

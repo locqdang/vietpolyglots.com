@@ -3,7 +3,9 @@ import { readSession } from '../../../../lib/auth/session';
 import { getRateLimitStatus } from '../../../../lib/image-generate/rate-limit';
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 /**

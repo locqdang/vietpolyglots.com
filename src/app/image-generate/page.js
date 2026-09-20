@@ -34,13 +34,11 @@ const STAGE_BAR_PERCENT = { queued: 33, processing: 66, completed: 100 };
 function ProgressStepper({ stage }) {
   // On completion every step is done (Success included); otherwise light up the
   // active step and mark all earlier steps done.
-  const activeIndex =
-    stage === 'completed' ? PROGRESS_STEPS.length : STAGE_INDEX[stage] ?? 0;
+  const activeIndex = stage === 'completed' ? PROGRESS_STEPS.length : (STAGE_INDEX[stage] ?? 0);
   return (
     <ol className="image-generate__steps">
       {PROGRESS_STEPS.map((label, index) => {
-        const state =
-          activeIndex > index ? 'done' : activeIndex === index ? 'active' : 'todo';
+        const state = activeIndex > index ? 'done' : activeIndex === index ? 'active' : 'todo';
         return (
           <li
             key={label}
@@ -403,10 +401,10 @@ export default function ImageGeneratePage() {
         <div className="image-generate__notice" role="note">
           <h2 className="image-generate__notice-title">Please read before generating</h2>
           <p>
-            Images are created by an AI model and are provided for personal use only. You are
-            solely responsible for how you use any image you generate. The site owner provides this
-            service “as is”, without warranties of any kind, and is not responsible for the content
-            of generated images or for any use you make of them. Do not generate images of real,
+            Images are created by an AI model and are provided for personal use only. You are solely
+            responsible for how you use any image you generate. The site owner provides this service
+            “as is”, without warranties of any kind, and is not responsible for the content of
+            generated images or for any use you make of them. Do not generate images of real,
             identifiable people, or content that is illegal, infringes another&rsquo;s rights, or
             violates applicable law or this site&rsquo;s terms of service. By checking the box below
             you confirm you have read and agree to these terms.
@@ -439,7 +437,9 @@ export default function ImageGeneratePage() {
           />
 
           <details className="image-generate__advanced">
-            <summary className="image-generate__advanced-summary">Options (negative prompt)</summary>
+            <summary className="image-generate__advanced-summary">
+              Options (negative prompt)
+            </summary>
             <label className="image-generate__label" htmlFor="negative">
               Things to avoid (optional)
             </label>

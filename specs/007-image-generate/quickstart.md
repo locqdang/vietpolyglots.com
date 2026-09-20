@@ -19,6 +19,7 @@ npm run test:unit -- src/tests/lib/image-generate-payload.test.js
 ```
 
 **Expected**: all pass.
+
 - `buildChromaPayload` produces a valid gate Chroma payload (prompt trimmed; optional params passed through only when provided) for a prompt.
 - Empty/whitespace/oversized prompt is rejected per [data-model.md](./data-model.md).
 - Out-of-range numerics (e.g. `width` not a multiple of 8, `steps` > 100) are rejected.
@@ -30,6 +31,7 @@ npm run test:integration -- src/tests/api/image-generate.integration.test.js
 ```
 
 **Expected** (see [contracts/image-generate-api.md](./contracts/image-generate-api.md)):
+
 - `POST` without a session → `401`, and the gate is **not** called.
 - `POST` with a session but empty prompt → `400`, and the gate is **not** called.
 - `POST` with a session + valid prompt + stubbed gate → `200` with `image` (data URL), `promptId`, `seed`.
@@ -53,6 +55,7 @@ npm run test:e2e -- e2e/image-generate.spec.js
 The Playwright config auto-starts the dev server on `http://127.0.0.1:3100` (`E2E_TEST_MODE=1`).
 
 **Expected**:
+
 - **Unauthenticated** navigation to `/services/image-generate` → redirected to `/login?redirect=%2Fservices%2Fimage-generate`.
 - **Authenticated** (via `signInWithMagicLink`): page renders the prompt form + Generate button; submit reaches a terminal state:
   - With the gate up → an `<img>` with the generated result appears.
@@ -74,10 +77,10 @@ The Playwright config auto-starts the dev server on `http://127.0.0.1:3100` (`E2
 
 ## Definition of done (maps to spec Success Criteria)
 
-| # | Check | SC |
-|---|-------|----|
-| 1 | Signed-in user gets a displayed image from a prompt in one submit | SC-001 |
-| 2 | Unauth page → login redirect; unauth API → `401` | SC-002 |
-| 3 | Empty prompt rejected without reaching the gate | SC-003 |
-| 4 | Down/slow gate → bounded error + retry (no hang) | SC-004 |
-| 5 | Gate/ComfyUI host/port never in HTML/network/client JS | SC-005 |
+| #   | Check                                                             | SC     |
+| --- | ----------------------------------------------------------------- | ------ |
+| 1   | Signed-in user gets a displayed image from a prompt in one submit | SC-001 |
+| 2   | Unauth page → login redirect; unauth API → `401`                  | SC-002 |
+| 3   | Empty prompt rejected without reaching the gate                   | SC-003 |
+| 4   | Down/slow gate → bounded error + retry (no hang)                  | SC-004 |
+| 5   | Gate/ComfyUI host/port never in HTML/network/client JS            | SC-005 |

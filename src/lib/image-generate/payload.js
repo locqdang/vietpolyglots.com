@@ -76,7 +76,10 @@ export function buildChromaPayload(request) {
       payload.negative_prompt = defaultNegative;
     }
   } else {
-    if (typeof values.negative_prompt !== 'string' || values.negative_prompt.length > MAX_NEGATIVE) {
+    if (
+      typeof values.negative_prompt !== 'string' ||
+      values.negative_prompt.length > MAX_NEGATIVE
+    ) {
       return { ok: false, error: 'negative_prompt must be a string of at most 10000 characters' };
     }
     payload.negative_prompt = values.negative_prompt;

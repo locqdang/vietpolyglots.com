@@ -63,7 +63,10 @@ export async function submitImageGeneration(payload) {
   });
   const body = await parseGateJson(response);
   if (!response.ok || !body.prompt_id) {
-    throw new GateError(response.status || 502, body.detail || 'Unable to submit image generation.');
+    throw new GateError(
+      response.status || 502,
+      body.detail || 'Unable to submit image generation.'
+    );
   }
   return { promptId: body.prompt_id, seed: body.seed };
 }

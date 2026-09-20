@@ -25,7 +25,7 @@ Feature: `007-image-generate`. Single authenticated endpoint that calls the GPU 
 }
 ```
 
-Only `prompt` is required. Omitted fields are not forwarded, so the gate applies its defaults. See [data-model.md](../data-model.md) → *Generation Request* for the full field table and validation/clamp rules.
+Only `prompt` is required. Omitted fields are not forwarded, so the gate applies its defaults. See [data-model.md](../data-model.md) → _Generation Request_ for the full field table and validation/clamp rules.
 
 ## Responses
 

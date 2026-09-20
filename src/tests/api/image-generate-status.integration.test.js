@@ -109,10 +109,7 @@ describe('GET /api/image/generate/[jobId] integration', () => {
     });
     getImageGenerationStatus.mockResolvedValue({ status: 'processing', promptId: 'p-1' });
     const res = createMockRes();
-    await statusHandler(
-      { method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } },
-      res
-    );
+    await statusHandler({ method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } }, res);
     expect(res.statusCode).toBe(200);
     expect(getImageGenerationStatus).toHaveBeenCalledWith('p-1');
     expect(res.body.status).toBe('processing');
@@ -131,10 +128,7 @@ describe('GET /api/image/generate/[jobId] integration', () => {
     });
     getImageGenerationStatus.mockResolvedValue({ status: 'queued', promptId: 'p-1' });
     const res = createMockRes();
-    await statusHandler(
-      { method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } },
-      res
-    );
+    await statusHandler({ method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } }, res);
     expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe('processing');
     expect(res.body.progress.percent).toBe(50);
@@ -150,10 +144,7 @@ describe('GET /api/image/generate/[jobId] integration', () => {
     });
     getImageGenerationStatus.mockResolvedValue({ status: 'processing', promptId: 'p-1' });
     const res = createMockRes();
-    await statusHandler(
-      { method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } },
-      res
-    );
+    await statusHandler({ method: 'GET', query: { jobId: 'img_1', promptId: 'p-1' } }, res);
     expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe('processing');
     expect(res.body.progress.percent).toBe(60);

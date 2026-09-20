@@ -111,15 +111,11 @@ export function ensureWorkerStarted() {
     return worker;
   }
 
-  worker = new Worker(
-    QUEUE_NAME,
-    (job) => processGenerationJob(job.data),
-    {
-      connection: { url: redisUrl() },
-      // One job at a time: the gate owns the GPU and only one render should run.
-      concurrency: 1,
-    }
-  );
+  worker = new Worker(QUEUE_NAME, (job) => processGenerationJob(job.data), {
+    connection: { url: redisUrl() },
+    // One job at a time: the gate owns the GPU and only one render should run.
+    concurrency: 1,
+  });
 
   worker.on('error', (error) => {
     logger.error({ error: serializeError(error) }, 'image-gen worker error');

@@ -3,7 +3,9 @@ import { readSession } from '../../../../lib/auth/session';
 import { listJobsByOwner } from '../../../../lib/image-generate/jobs';
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 function requestedLimit(value) {
@@ -38,7 +40,12 @@ export default async function handler(req, res) {
   const limit = requestedLimit(req.query?.limit);
   const page = requestedPage(req.query?.page);
   const offset = (page - 1) * limit;
-  const { jobs, total, limit: appliedLimit, offset: appliedOffset } = await listJobsByOwner(email, {
+  const {
+    jobs,
+    total,
+    limit: appliedLimit,
+    offset: appliedOffset,
+  } = await listJobsByOwner(email, {
     limit,
     offset,
   });

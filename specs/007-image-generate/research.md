@@ -4,7 +4,7 @@ Feature: `007-image-generate`. Resolves every unknown raised in the spec/plan Te
 
 ## R0 — What "port 8189" actually is: the GPU gate (not ComfyUI directly)
 
-**Finding**: Port `8189` is **not** a raw ComfyUI port. It is the **GPU gate** (`gpu-gate`), a Docker container on the LAN at `192.168.0.62:8189` (published as `0.0.0.0:8189->8189`). Per its README it is *"a GPU inference gate with VRAM handoff and a GPU lease mutex"* and — decisively — *"All inference clients must use the gate ports. Do not connect to ComfyUI, SD.Next, or ComfyUI Manager ports directly from other apps."*
+**Finding**: Port `8189` is **not** a raw ComfyUI port. It is the **GPU gate** (`gpu-gate`), a Docker container on the LAN at `192.168.0.62:8189` (published as `0.0.0.0:8189->8189`). Per its README it is _"a GPU inference gate with VRAM handoff and a GPU lease mutex"_ and — decisively — _"All inference clients must use the gate ports. Do not connect to ComfyUI, SD.Next, or ComfyUI Manager ports directly from other apps."_
 
 **Verified live** (from this host): `GET http://192.168.0.62:8189/ → 200`; `POST /api/chroma/generate {} → 400 {"error":"invalid_request","detail":"prompt is required and must be a non-empty string"}`. The endpoint is real and reachable without burning the GPU.
 
@@ -27,10 +27,23 @@ Feature: `007-image-generate`. Resolves every unknown raised in the spec/plan Te
 | `filename_prefix` | string | `Chroma1-HD/api` | relative, ≤ 128, no `..`/leading `/` |
 
 **Success response** (`chroma_generate`, `gpu_gate.py:540`):
+
 ```json
-{ "status": "success", "prompt_id": "...", "seed": 123,
-  "images": [ { "filename": "...", "subfolder": "", "type": "output", "url": "/view?filename=...&subfolder=...&type=output" } ] }
+{
+  "status": "success",
+  "prompt_id": "...",
+  "seed": 123,
+  "images": [
+    {
+      "filename": "...",
+      "subfolder": "",
+      "type": "output",
+      "url": "/view?filename=...&subfolder=...&type=output"
+    }
+  ]
+}
 ```
+
 The `url` is **relative** (the gate intentionally keeps it relative so it works through either the direct LAN address or a reverse proxy). We resolve it against `GPU_GATE_URL` to fetch the bytes.
 
 **Error responses** (the gate's own codes — we pass these through / map to the page):
@@ -50,6 +63,7 @@ The `url` is **relative** (the gate intentionally keeps it relative so it works 
 **Rationale**: The browser cannot reach `192.168.0.62:8189` (private LAN) in production, and the gate's `url` is relative, so the server must resolve and fetch the bytes. A data URL is the simplest stateless transport: no new static-asset route, no disk persistence (results are transient, v1), no extra URL the client must fetch. Response size is bounded by a single 512x512 image (well under ~2 MB base64). Content type is inferred from the gate's image `filename` extension (default `image/png`).
 
 **Alternatives considered**:
+
 - Return the gate's relative `url` and have the browser fetch it directly — leaks the internal gate host/port to the client and fails (private LAN + relative path), violates FR-010. Rejected.
 - Persist to disk + serve via `/api/image/{id}` — adds storage and an id lifecycle; overkill for transient v1 results.
 - Stream the image body directly with `image/png` content type — also valid, but a data URL keeps the single JSON response contract uniform (image + status + errors) and is trivially testable.
@@ -57,6 +71,7 @@ The `url` is **relative** (the gate intentionally keeps it relative so it works 
 ## R3 — The request-mapping helper (pure function)
 
 **Decision**: A pure helper `buildChromaPayload({ prompt, negativePrompt?, width?, height?, steps?, cfg?, seed? })` produces the gate payload. It:
+
 - trims and validates `prompt` (non-empty, ≤ 10000) — empty/oversized rejected before any HTTP call (FR-004, SC-003);
 - passes through optional params **only when provided**, so the gate applies its own defaults otherwise;
 - clamps/validates the optional numeric fields to the gate's ranges (width/height multiple of 8 in 256–2048, steps 1–100, cfg 0–20, seed -1 or 0..2^63-1) so we fail fast with a clean 400 instead of echoing the gate's.
@@ -68,6 +83,7 @@ The `url` is **relative** (the gate intentionally keeps it relative so it works 
 ## R4 — Authentication (unchanged)
 
 **Decision**: Reuse the existing auth as-is.
+
 - Page: add `'/services/image-generate'` to `privateRoutes` in `src/lib/auth.tsx`. The app is already wrapped in `<RequireAuth>` (via `Providers`), so this single list edit gives the client-side redirect to `/login?redirect=/services/image-generate`.
 - API: call `readSession(req)` at the top of `src/pages/api/image/generate.js`; return `401` if no session. Defense-in-depth (the page gate is not the only lock).
 

@@ -5,7 +5,12 @@ import {
   getImageGenerationStatus,
   GateError,
 } from '../../lib/image-generate/gate-client';
-import { markProcessing, attachPromptId, completeJob, failJob } from '../../lib/image-generate/jobs';
+import {
+  markProcessing,
+  attachPromptId,
+  completeJob,
+  failJob,
+} from '../../lib/image-generate/jobs';
 
 vi.mock('../../lib/image-generate/gate-client', () => ({
   submitImageGeneration: vi.fn(),
@@ -67,9 +72,9 @@ describe('image-generate worker processor', () => {
       new GateError(504, 'Generation timed out — the GPU gate did not respond in time.')
     );
 
-    await expect(processGenerationJob({ jobId: 'img_2', payload: { prompt: 'a cat' } })).rejects.toBeInstanceOf(
-      GateError
-    );
+    await expect(
+      processGenerationJob({ jobId: 'img_2', payload: { prompt: 'a cat' } })
+    ).rejects.toBeInstanceOf(GateError);
     expect(completeJob).not.toHaveBeenCalled();
     expect(failJob).toHaveBeenCalledWith(
       'img_2',
@@ -79,7 +84,9 @@ describe('image-generate worker processor', () => {
 
   it('maps a non-GateError to a generic message and re-throws', async () => {
     submitImageGeneration.mockRejectedValue(new Error('boom'));
-    await expect(processGenerationJob({ jobId: 'img_3', payload: { prompt: 'a cat' } })).rejects.toThrow('boom');
+    await expect(
+      processGenerationJob({ jobId: 'img_3', payload: { prompt: 'a cat' } })
+    ).rejects.toThrow('boom');
     expect(failJob).toHaveBeenCalledWith(
       'img_3',
       expect.objectContaining({ error: expect.stringMatching(/try again/) })

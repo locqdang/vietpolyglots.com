@@ -147,7 +147,12 @@ describe('default negative prompt', () => {
 
   it('respects an explicit empty negative prompt (user cleared the default)', () => {
     process.env.IMAGE_GEN_DEFAULT_NEGATIVE = 'blurry, watermark';
-    const result = buildChromaPayload({ prompt: 'a cat', width: 512, height: 512, negative_prompt: '' });
+    const result = buildChromaPayload({
+      prompt: 'a cat',
+      width: 512,
+      height: 512,
+      negative_prompt: '',
+    });
     expect(result.ok).toBe(true);
     expect(result.payload.negative_prompt).toBe('');
   });

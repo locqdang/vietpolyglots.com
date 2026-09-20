@@ -8,7 +8,9 @@ import {
 import { getImageGenerationStatus } from '../../../../lib/image-generate/gate-client';
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+  return String(email || '')
+    .trim()
+    .toLowerCase();
 }
 
 /**

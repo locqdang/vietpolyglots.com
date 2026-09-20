@@ -15,6 +15,7 @@ Add a protected **Services → Image Generate** page to vietpolyglots.com. A sig
 **Language/Version**: TypeScript + JavaScript on Node (Next.js 16.1.6, React 19). New files follow existing conventions: API routes in plain JS (`src/pages/api/**`), App Router pages in `'use client'` JS (`src/app/**`).
 
 **Primary Dependencies**:
+
 - `next` (App Router page + Pages Router API route), `react`
 - Existing auth: `src/lib/auth/session.js` (`readSession`), `src/lib/auth.tsx` (`RequireAuth`, `privateRoutes`)
 - Existing logging: `src/lib/api-logging.js` (`createApiLogger`), `src/lib/logger.js` (`serializeError`)
@@ -23,6 +24,7 @@ Add a protected **Services → Image Generate** page to vietpolyglots.com. A sig
 **Storage**: N/A for v1 — generation results are transient (returned to the client, not persisted). No DB schema changes.
 
 **Testing**:
+
 - Unit: `vitest` (pure request-mapping helper + input validation)
 - Integration: `vitest` (API route auth/validation contract, GPU gate stubbed)
 - E2E: `@playwright/test` against `http://127.0.0.1:3100`, reusing `e2e/helpers/route-auth.js` (`signInWithMagicLink`)
@@ -34,6 +36,7 @@ Add a protected **Services → Image Generate** page to vietpolyglots.com. A sig
 **Performance Goals**: A single generation is a single blocking request to the gate (the gate waits for the render with its own timeout). The app adds a client-side request timeout (default ≤ 120 s) so a down/slow gate cannot hang the request indefinitely. No throughput target — single-user interactive tool.
 
 **Constraints**:
+
 - The GPU gate / ComfyUI host:port MUST NOT appear in page HTML, client JS, or any client-visible network response (FR-010, SC-005).
 - The app MUST delegate generation entirely to the gate's `POST /api/chroma/generate`; it MUST NOT build/submit a ComfyUI node graph (R0/I7).
 - The request to the gate MUST be bounded by a client-side timeout so a down/slow gate cannot hang the request indefinitely (SC-004).
@@ -52,6 +55,7 @@ Add a protected **Services → Image Generate** page to vietpolyglots.com. A sig
 - **Manual Smoke**: With the GPU gate reachable on the configured host/port, run a real generation from the browser and confirm the image renders; confirm the gate/ComfyUI host/port never appears in the page source or network panel.
 
 **Test-First Targets**:
+
 - Request-mapping helper produces a valid gate payload and clamps/validates inputs (pure, stable).
 - API `401` without session (clear permission rule).
 

@@ -92,7 +92,13 @@ export async function markProcessing(jobId) {
   const col = await collection();
   await col.updateOne(
     { jobId },
-    { $set: { status: 'processing', progress: { label: 'Generating', percent: 50 }, updatedAt: now() } }
+    {
+      $set: {
+        status: 'processing',
+        progress: { label: 'Generating', percent: 50 },
+        updatedAt: now(),
+      },
+    }
   );
 }
 
@@ -139,9 +145,7 @@ export async function completeJob(jobId, { image, seed, promptId }) {
   if (job) {
     try {
       const history = await historyCollection();
-      const expiresAt = new Date(
-        completedAt.getTime() + retentionDays() * 24 * 60 * 60 * 1000
-      );
+      const expiresAt = new Date(completedAt.getTime() + retentionDays() * 24 * 60 * 60 * 1000);
       await history.updateOne(
         { jobId },
         {

@@ -8,19 +8,20 @@ Feature: `007-image-generate`. v1 is **stateless** — no database entities, no 
 
 The payload the client POSTs to `/api/image/generate`. Numeric ranges mirror the gate's own `validate_chroma_request` so we fail fast with a clean `400` instead of echoing the gate's.
 
-| Field | Type | Required | Validation / Clamp | Notes |
-|-------|------|----------|--------------------|-------|
-| `prompt` | string | yes | Trimmed; non-empty; length ≤ `MAX_PROMPT_LENGTH` (default 10000, = gate max) | Free-text description of the desired image |
-| `negativePrompt` | string | no | Trimmed; length ≤ 10000; omitted → gate default | Optional |
-| `width` | int | no | 256–2048, **multiple of 8**; default 512 | Omitted → gate default |
-| `height` | int | no | 256–2048, **multiple of 8**; default 512 | Omitted → gate default |
-| `steps` | int | no | 1–100; default 26 | Omitted → gate default |
-| `cfg` | number | no | 0–20; default 3.8 | Omitted → gate default |
-| `seed` | int | no | `-1` (random) or `0` ≤ seed < 2^63 | Omitted → gate random |
+| Field            | Type   | Required | Validation / Clamp                                                           | Notes                                      |
+| ---------------- | ------ | -------- | ---------------------------------------------------------------------------- | ------------------------------------------ |
+| `prompt`         | string | yes      | Trimmed; non-empty; length ≤ `MAX_PROMPT_LENGTH` (default 10000, = gate max) | Free-text description of the desired image |
+| `negativePrompt` | string | no       | Trimmed; length ≤ 10000; omitted → gate default                              | Optional                                   |
+| `width`          | int    | no       | 256–2048, **multiple of 8**; default 512                                     | Omitted → gate default                     |
+| `height`         | int    | no       | 256–2048, **multiple of 8**; default 512                                     | Omitted → gate default                     |
+| `steps`          | int    | no       | 1–100; default 26                                                            | Omitted → gate default                     |
+| `cfg`            | number | no       | 0–20; default 3.8                                                            | Omitted → gate default                     |
+| `seed`           | int    | no       | `-1` (random) or `0` ≤ seed < 2^63                                           | Omitted → gate random                      |
 
 > v1 exposes only `prompt` (and optionally `negativePrompt`) in the UI. `width`, `height`, `steps`, `cfg`, `seed` are accepted by the helper/API for flexibility but are not surfaced in the form (spec: advanced params optional for v1).
 
 **Validation rules**
+
 - `prompt` empty/whitespace-only → reject with `400` (SC-003: never reaches the gate).
 - `prompt` longer than `MAX_PROMPT_LENGTH` → `400`.
 - Any provided numeric field out of the gate's range, or `width`/`height` not a multiple of 8 → `400` (do not silently coerce garbage).
@@ -30,12 +31,12 @@ The payload the client POSTs to `/api/image/generate`. Numeric ranges mirror the
 
 The JSON the API returns to the client on success.
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `success` | boolean | `true` |
-| `image` | string | Data URL: `data:image/<ext>;base64,...` (the gate's `/view` image bytes, content type inferred from the image filename extension, default `png`) |
-| `promptId` | string | The gate's `prompt_id` (debugging / logging) |
-| `seed` | number | The gate's resolved `seed` (informational, lets a user re-run the same seed) |
+| Field      | Type    | Notes                                                                                                                                            |
+| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `success`  | boolean | `true`                                                                                                                                           |
+| `image`    | string  | Data URL: `data:image/<ext>;base64,...` (the gate's `/view` image bytes, content type inferred from the image filename extension, default `png`) |
+| `promptId` | string  | The gate's `prompt_id` (debugging / logging)                                                                                                     |
+| `seed`     | number  | The gate's resolved `seed` (informational, lets a user re-run the same seed)                                                                     |
 
 > No `model` field: the gate owns the Chroma model; the app does not know or expose it.
 
@@ -43,12 +44,13 @@ The JSON the API returns to the client on success.
 
 Returned on any failure.
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `success` | boolean | `false` |
-| `error` | string | User-safe message (no raw stack, no gate/ComfyUI host/port) |
+| Field     | Type    | Notes                                                       |
+| --------- | ------- | ----------------------------------------------------------- |
+| `success` | boolean | `false`                                                     |
+| `error`   | string  | User-safe message (no raw stack, no gate/ComfyUI host/port) |
 
 Error → HTTP status mapping:
+
 - Missing/invalid session → `401`
 - Invalid/missing/oversized prompt or out-of-range params → `400`
 - Gate `500` (`generation_failed`), `502` (`comfy_rejected_prompt` / `comfy_unavailable`), or `504` (`generation_timeout`) → passed through as `500`/`502`/`504` respectively with a user-safe message

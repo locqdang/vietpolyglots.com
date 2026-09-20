@@ -41,9 +41,7 @@ export default async function handler(req, res) {
 
   const request = req.body && typeof req.body === 'object' ? req.body : {};
   const replaceFailedJobId =
-    typeof request.replace_failed_job_id === 'string'
-      ? request.replace_failed_job_id.trim()
-      : '';
+    typeof request.replace_failed_job_id === 'string' ? request.replace_failed_job_id.trim() : '';
   const { ok, payload, error } = buildChromaPayload(request);
   if (!ok) {
     log.warn({ reason: 'invalid_request' }, 'Image generate invalid request');
@@ -55,7 +53,9 @@ export default async function handler(req, res) {
     rateLimit = await checkImageGenerateRateLimit(email);
   } catch (err) {
     logger.error({ error: serializeError(err) }, 'Image generate: rate limiter unavailable');
-    return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+    return res
+      .status(503)
+      .json({ error: 'Service temporarily unavailable. Please try again later.' });
   }
 
   res.setHeader('X-RateLimit-Limit', String(rateLimit.limit));
@@ -83,7 +83,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     logger.error({ error: serializeError(err) }, 'Image generate: job store unavailable');
-    return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+    return res
+      .status(503)
+      .json({ error: 'Service temporarily unavailable. Please try again later.' });
   }
 
   try {
@@ -94,7 +96,9 @@ export default async function handler(req, res) {
     try {
       await failJob(jobId, { error: 'Service temporarily unavailable. Please try again later.' });
     } catch {}
-    return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+    return res
+      .status(503)
+      .json({ error: 'Service temporarily unavailable. Please try again later.' });
   }
 
   if (replaceFailedJobId) {
