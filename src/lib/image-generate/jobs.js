@@ -195,6 +195,19 @@ export async function failJob(jobId, { error }) {
   );
 }
 
+export async function removeFailedJobByOwner(jobId, userEmail) {
+  if (!jobId) return false;
+  const col = await collection();
+  const result = await col.deleteMany({ jobId, userEmail, status: 'failed' });
+  const history = await historyCollection();
+  const hresult = await history.deleteMany({ jobId, userEmail, status: 'failed' });
+  logger.info(
+    { jobId, activeDeleted: result.deletedCount, historyDeleted: hresult.deletedCount },
+    'image-gen removeFailedJobByOwner'
+  );
+  return result.deletedCount > 0 || hresult.deletedCount > 0;
+}
+
 /**
  * Fetch a job by id, returning null if it does not exist.
  */

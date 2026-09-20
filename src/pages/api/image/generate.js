@@ -2,7 +2,7 @@ import { createApiLogger } from '../../../lib/api-logging';
 import { readSession } from '../../../lib/auth/session';
 import { logger, serializeError } from '../../../lib/logger';
 import { buildChromaPayload } from '../../../lib/image-generate/payload';
-import { createJob, failJob } from '../../../lib/image-generate/jobs';
+import { createJob, failJob, removeFailedJobByOwner } from '../../../lib/image-generate/jobs';
 import { enqueueGeneration } from '../../../lib/image-generate/queue';
 import { checkImageGenerateRateLimit } from '../../../lib/image-generate/rate-limit';
 
@@ -40,6 +40,10 @@ export default async function handler(req, res) {
   });
 
   const request = req.body && typeof req.body === 'object' ? req.body : {};
+  const replaceFailedJobId =
+    typeof request.replace_failed_job_id === 'string'
+      ? request.replace_failed_job_id.trim()
+      : '';
   const { ok, payload, error } = buildChromaPayload(request);
   if (!ok) {
     log.warn({ reason: 'invalid_request' }, 'Image generate invalid request');
@@ -91,6 +95,19 @@ export default async function handler(req, res) {
       await failJob(jobId, { error: 'Service temporarily unavailable. Please try again later.' });
     } catch {}
     return res.status(503).json({ error: 'Service temporarily unavailable. Please try again later.' });
+  }
+
+  if (replaceFailedJobId) {
+    try {
+      await removeFailedJobByOwner(replaceFailedJobId, email);
+    } catch (err) {
+      // The replacement is already queued. Keep both records rather than fail
+      // a valid new request if cleanup is temporarily unavailable.
+      logger.warn(
+        { replaceFailedJobId, error: serializeError(err) },
+        'Image generate: failed-record replacement cleanup unavailable'
+      );
+    }
   }
 
   log.info({ jobId }, 'Image generate: queued');

@@ -106,6 +106,15 @@ export default function ImageGeneratePage() {
     }
   }
 
+  async function tryAgain(job) {
+    const savedPrompt = String(job?.prompt || '').trim();
+    if (!savedPrompt) return;
+    setPrompt(savedPrompt);
+    setNegative(String(job?.negativePrompt || ''));
+    setHistory((current) => current.filter((item) => item.jobId !== job.jobId));
+    await submitGeneration(savedPrompt, String(job?.negativePrompt || ''), job.jobId);
+  }
+
   async function resumeJob(job) {
     setClientError('');
     setError('');
@@ -156,6 +165,14 @@ export default function ImageGeneratePage() {
             return;
           }
           if (data.status === 'failed') {
+            setActiveJob((current) => ({
+              ...(current || {}),
+              jobId: data.jobId,
+              promptId: data.promptId,
+              prompt: data.prompt,
+              negativePrompt: data.negativePrompt || '',
+              status: 'failed',
+            }));
             setError(data.error || 'Image generation failed. Please try again.');
             setStatusLabel('');
             setLoading(false);
@@ -171,7 +188,7 @@ export default function ImageGeneratePage() {
     }
   }
 
-  async function submitGeneration(promptText, negativeText) {
+  async function submitGeneration(promptText, negativeText, replaceFailedJobId = '') {
     if (loading) return;
     setClientError('');
     setError('');
@@ -187,6 +204,7 @@ export default function ImageGeneratePage() {
         body: JSON.stringify({
           prompt: promptText,
           negative_prompt: negativeText.trim() || undefined,
+          replace_failed_job_id: replaceFailedJobId || undefined,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -328,9 +346,11 @@ export default function ImageGeneratePage() {
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"
-                onClick={() => resumeJob(activeJob)}
+                onClick={() =>
+                  activeJob.status === 'failed' ? tryAgain(activeJob) : resumeJob(activeJob)
+                }
               >
-                Resume
+                {activeJob.status === 'failed' ? 'Try again' : 'Resume'}
               </button>
             ) : null}
           </div>
@@ -340,10 +360,6 @@ export default function ImageGeneratePage() {
           <figure className="image-generate__result">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={result.image} alt="Generated image" className="image-generate__img" />
-            <figcaption className="image-generate__meta">
-              <span>Seed {result.seed}</span>
-              {result.promptId ? <span>Prompt ID: {result.promptId}</span> : null}
-            </figcaption>
           </figure>
         ) : null}
 
@@ -373,7 +389,6 @@ export default function ImageGeneratePage() {
                     <strong>{job.prompt}</strong>
                     <span>
                       {STATUS_LABELS[job.status] || job.status}
-                      {job.promptId ? ` · Prompt ID: ${job.promptId}` : ''}
                       {job.createdAt ? ` · ${formatDate(job.createdAt)}` : ''}
                     </span>
                   </div>
@@ -386,6 +401,15 @@ export default function ImageGeneratePage() {
                         onClick={() => loadHistoryJob(job)}
                       >
                         Load
+                      </button>
+                    ) : job.status === 'failed' ? (
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        disabled={loading || !job.prompt}
+                        onClick={() => tryAgain(job)}
+                      >
+                        Try again
                       </button>
                     ) : (
                       <button

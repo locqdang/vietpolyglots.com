@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import handler from '../../pages/api/image/generate';
 import { readSession } from '../../lib/auth/session';
-import { createJob, failJob } from '../../lib/image-generate/jobs';
+import { createJob, failJob, removeFailedJobByOwner } from '../../lib/image-generate/jobs';
 import { enqueueGeneration } from '../../lib/image-generate/queue';
 import { checkImageGenerateRateLimit } from '../../lib/image-generate/rate-limit';
 
@@ -12,6 +12,7 @@ vi.mock('../../lib/auth/session', () => ({
 vi.mock('../../lib/image-generate/jobs', () => ({
   createJob: vi.fn(),
   failJob: vi.fn(),
+  removeFailedJobByOwner: vi.fn(),
   getJob: vi.fn(),
   getJobByOwner: vi.fn(),
   markProcessing: vi.fn(),
@@ -124,6 +125,42 @@ describe('POST /api/image/generate integration', () => {
         }),
       })
     );
+  });
+
+  it('queues a new request and removes the owning failed job it replaces', async () => {
+    readSession.mockReturnValue(AUTHED);
+    const req = {
+      method: 'POST',
+      body: {
+        prompt: 'a cat',
+        replace_failed_job_id: 'img_failed',
+      },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(202);
+    expect(enqueueGeneration).toHaveBeenCalled();
+    expect(removeFailedJobByOwner).toHaveBeenCalledWith('img_failed', 'loc@dang.com');
+    expect(enqueueGeneration.mock.invocationCallOrder[0]).toBeLessThan(
+      removeFailedJobByOwner.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('does not remove the failed job if the replacement cannot be queued', async () => {
+    readSession.mockReturnValue(AUTHED);
+    enqueueGeneration.mockRejectedValue(new Error('redis down'));
+    const req = {
+      method: 'POST',
+      body: { prompt: 'a cat', replace_failed_job_id: 'img_failed' },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(503);
+    expect(removeFailedJobByOwner).not.toHaveBeenCalled();
   });
 
   it('returns 429 with Retry-After and creates no job when over quota', async () => {
