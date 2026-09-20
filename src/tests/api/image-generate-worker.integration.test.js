@@ -69,7 +69,7 @@ describe('image-generate worker processor', () => {
 
   it('records a user-safe error and re-throws when submission fails', async () => {
     submitImageGeneration.mockRejectedValue(
-      new GateError(504, 'Generation timed out — the GPU gate did not respond in time.')
+      new GateError(504, 'Generation timed out. Please try again.')
     );
 
     await expect(

@@ -25,9 +25,12 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = GATE_TIMEOUT_MS) 
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new GateError(504, 'Generation timed out — the GPU gate did not respond in time.');
+      throw new GateError(504, 'Generation timed out. Please try again.');
     }
-    throw new GateError(502, 'Unable to reach the GPU gate. Please try again later.');
+    throw new GateError(
+      502,
+      'Image generation service is temporarily unavailable. Please try again later.'
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -46,7 +49,7 @@ async function fetchImageDataUrl(baseUrl, imageUrl) {
   const url = `${baseUrl}${imageUrl}`;
   const response = await fetchWithTimeout(url, {}, 10_000);
   if (!response.ok) {
-    throw new GateError(502, 'Failed to fetch the generated image from the GPU gate.');
+    throw new GateError(502, 'Failed to fetch the generated image. Please try again.');
   }
   const buffer = Buffer.from(await response.arrayBuffer());
   const contentType = response.headers.get('content-type') || 'image/png';
@@ -87,7 +90,7 @@ export async function getImageGenerationStatus(promptId) {
   }
   const images = Array.isArray(body.images) ? body.images : [];
   if (!images[0]?.url) {
-    throw new GateError(500, 'The GPU gate returned no image. Please try again.');
+    throw new GateError(500, 'No image was returned. Please try again.');
   }
   return {
     status: 'completed',
