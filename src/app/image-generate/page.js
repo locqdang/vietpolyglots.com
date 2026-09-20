@@ -25,6 +25,11 @@ const STATUS_LABELS = {
 // active step and marks every earlier step done.
 const PROGRESS_STEPS = ['Queued', 'Generating', 'Success'];
 const STAGE_INDEX = { queued: 0, processing: 1, completed: 2 };
+// The progress bar is a direct visual twin of the stepper: both are driven by
+// the same `stage` value, so the text, the step illustration, and the bar can
+// never disagree. The fill tracks "how far through the 3-step pipeline" we've
+// reached (the active step is the leading edge of the bar).
+const STAGE_BAR_PERCENT = { queued: 33, processing: 66, completed: 100 };
 
 function ProgressStepper({ stage }) {
   // On completion every step is done (Success included); otherwise light up the
@@ -73,7 +78,6 @@ export default function ImageGeneratePage() {
   const [loading, setLoading] = useState(false);
   const [statusLabel, setStatusLabel] = useState('');
   const [stage, setStage] = useState('queued');
-  const [progressPercent, setProgressPercent] = useState(0);
   const [quota, setQuota] = useState(null);
   const [result, setResult] = useState(null); // { image, seed, promptId, jobId, prompt, negativePrompt }
   const [activeJob, setActiveJob] = useState(null);
@@ -202,7 +206,6 @@ export default function ImageGeneratePage() {
       setLoading(true);
       setStatusLabel(STATUS_LABELS[job.status]);
       setStage(job.status === 'processing' ? 'processing' : 'queued');
-      setProgressPercent(job.progress?.percent ?? 0);
       await pollStatus(job.jobId, job.promptId);
       return;
     }
@@ -249,7 +252,6 @@ export default function ImageGeneratePage() {
     setLoading(true);
     setStatusLabel(STATUS_LABELS[job.status] || STATUS_LABELS.processing);
     setStage(job.status === 'processing' ? 'processing' : 'queued');
-    setProgressPercent(job.progress?.percent ?? 0);
     await pollStatus(job.jobId, job.promptId);
   }
 
@@ -262,7 +264,6 @@ export default function ImageGeneratePage() {
       if (!mountedRef.current || pollId !== pollRef.current) return;
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
         setError('This is taking longer than expected. Please try again.');
-        setProgressPercent(0);
         setLoading(false);
         return;
       }
@@ -290,7 +291,6 @@ export default function ImageGeneratePage() {
               negativePrompt: data.negativePrompt || '',
             });
             if (data.image) ensureThumbnail(data.jobId, data.image);
-            setProgressPercent(100);
             setStage('completed');
             setStatusLabel('');
             setLoading(false);
@@ -307,7 +307,6 @@ export default function ImageGeneratePage() {
               status: 'failed',
             }));
             setError(data.error || 'Image generation failed. Please try again.');
-            setProgressPercent(0);
             setStage('queued');
             setStatusLabel('');
             setLoading(false);
@@ -315,13 +314,8 @@ export default function ImageGeneratePage() {
           }
           setStatusLabel(STATUS_LABELS[data.status] || STATUS_LABELS.queued);
           // Advance the stepper to the gate's reported stage, but never backwards.
+          // The progress bar is driven from this same stage, so it can't drift.
           setStage((current) => advanceStage(current, data.status));
-          // Monotonic progress: the bar only ever moves forward, so an out-of-order
-          // poll (or a gate status that briefly lags) can never make it drop.
-          const reported = Number(data.progress?.percent);
-          if (Number.isFinite(reported) && reported >= 0) {
-            setProgressPercent((current) => Math.min(100, Math.max(current, reported)));
-          }
         }
       } catch {
         // Network blip while polling — keep going until the timeout.
@@ -358,7 +352,6 @@ export default function ImageGeneratePage() {
 
       if (response.status === 202 && data?.jobId) {
         setActiveJob({ jobId: data.jobId, promptId: null, status: 'queued' });
-        setProgressPercent(0);
         await refreshHistory(1);
         await pollStatus(data.jobId);
         return;
@@ -491,11 +484,11 @@ export default function ImageGeneratePage() {
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={progressPercent}
+              aria-valuenow={STAGE_BAR_PERCENT[stage] ?? 0}
             >
               <div
                 className="image-generate__bar-fill"
-                style={{ width: `${progressPercent}%` }}
+                style={{ width: `${STAGE_BAR_PERCENT[stage] ?? 0}%` }}
               />
             </div>
             <p>{statusLabel || 'Working…'}</p>
