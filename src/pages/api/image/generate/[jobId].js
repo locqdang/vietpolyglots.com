@@ -67,10 +67,13 @@ export default async function handler(req, res) {
         });
         job = await getJobByOwner(job.jobId, email);
       } else if (gateStatus.status === 'queued' || gateStatus.status === 'processing') {
-        // Never regress the job: once it has left the queue, a stale "queued" from
-        // the gate (ComfyUI has not picked the prompt up yet) must not pull the
-        // progress bar backwards, and the reported percent is the higher of the
-        // stored and gate values so the bar only ever moves forward.
+        // Never regress the stage: the stored status is already accurate (the
+        // worker no longer flips it to "processing" early — it moves queued →
+        // processing exactly when the gate accepts the prompt and returns a prompt
+        // id, which is when the GPU is actually acquired). The live gate read can
+        // briefly report a staler state (e.g. "queued" right after the prompt is
+        // attached, before ComfyUI has recorded it), so keep the higher of the two
+        // and only move forward. The reported percent is likewise the higher value.
         const statusRank = { queued: 1, processing: 2 };
         const nextStatus =
           (statusRank[job.status] ?? 0) >= (statusRank[gateStatus.status] ?? 0)

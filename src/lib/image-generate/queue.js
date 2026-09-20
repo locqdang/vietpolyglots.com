@@ -13,7 +13,7 @@
 import { Queue, Worker } from 'bullmq';
 import { logger, serializeError } from '../logger';
 import { submitImageGeneration, getImageGenerationStatus, GateError } from './gate-client';
-import { markProcessing, attachPromptId, completeJob, failJob } from './jobs';
+import { attachPromptId, completeJob, failJob } from './jobs';
 
 const QUEUE_NAME = 'image-generate';
 
@@ -27,9 +27,12 @@ let queue = null;
 let worker = null;
 
 /**
- * Run one generation job: mark processing, call the gate, and persist the
- * outcome (image on success, user-safe error on failure). Exported so tests can
- * drive it directly without a live Redis/worker.
+ * Run one generation job: submit to the gate, persist the prompt id, then poll
+ * the gate by prompt id until the image is ready (success) or it fails. The job
+ * stays "queued" until the gate accepts the prompt and returns a prompt id — the
+ * GPU wait happens inside the gate's submit, so marking it "processing" up front
+ * would hide the real "waiting for the GPU" stage. Exported so tests can drive
+ * it directly without a live Redis/worker.
  *
  * @param {{ jobId: string, payload: object }} jobData
  * @returns {Promise<object>} the gate result on success
@@ -37,9 +40,7 @@ let worker = null;
  */
 export async function processGenerationJob(jobData) {
   const { jobId, payload } = jobData;
-  logger.info({ jobId }, 'image-gen worker: processing');
-
-  await markProcessing(jobId);
+  logger.info({ jobId }, 'image-gen worker: starting (queued for GPU)');
 
   try {
     const submitted = await submitImageGeneration(payload);

@@ -1531,6 +1531,64 @@ main {
   transition: width 0.5s ease;
 }
 
+.image-generate__steps {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.image-generate__step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  transition: color 0.3s ease;
+}
+
+.image-generate__step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  border: 2px solid #cbd5e1;
+  background: #fff;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.3s ease;
+}
+
+.image-generate__step--active {
+  color: #1d4ed8;
+}
+
+.image-generate__step--active .image-generate__step-dot {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+
+.image-generate__step--done {
+  color: #047857;
+}
+
+.image-generate__step--done .image-generate__step-dot {
+  border-color: #10b981;
+  background: #10b981;
+  color: #fff;
+}
+
+.image-generate__step-label {
+  white-space: nowrap;
+}
+
 .image-generate__history {
   margin-top: 2rem;
   padding-top: 1.5rem;

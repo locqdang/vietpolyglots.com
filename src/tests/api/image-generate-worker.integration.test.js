@@ -45,7 +45,10 @@ describe('image-generate worker processor', () => {
 
     const result = await processGenerationJob({ jobId: 'img_1', payload: { prompt: 'a cat' } });
 
-    expect(markProcessing).toHaveBeenCalledWith('img_1');
+    // The worker no longer flips the job to "processing" up front: it stays
+    // "queued" until the gate accepts the prompt (the GPU wait happens inside the
+    // gate's submit). attachPromptId is what moves it to "processing".
+    expect(markProcessing).not.toHaveBeenCalled();
     expect(submitImageGeneration).toHaveBeenCalledWith({ prompt: 'a cat' });
     expect(attachPromptId).toHaveBeenCalledWith('img_1', { promptId: 'p-123', seed: 42 });
     expect(getImageGenerationStatus).toHaveBeenCalledWith('p-123');

@@ -4,14 +4,59 @@ import { useEffect, useRef, useState } from 'react';
 
 const MAX_PROMPT = 10_000;
 const POLL_INTERVAL_MS = 1500;
-const POLL_TIMEOUT_MS = 180_000; // hard cap so the UI never hangs
+// Generous because the real wait is the GPU gate: a render is ~30s, but the job
+// first waits for the GPU while the LLM holds it (observed holds up to ~5 min).
+// The "Queued" stage tells the user they're waiting, so let the poll run long
+// enough to actually see it advance to "Generating" and "Success".
+const POLL_TIMEOUT_MS = 420_000; // hard cap so the UI never hangs
 
 const STATUS_LABELS = {
-  queued: 'In queue…',
+  queued: 'Waiting for the GPU…',
   processing: 'Generating your image…',
   completed: 'Done',
   failed: 'Failed',
 };
+
+// Pipeline stages shown in the progress stepper, in order. The gate reports the
+// job's current stage (queued/processing/completed); the stepper lights up the
+// active step and marks every earlier step done.
+const PROGRESS_STEPS = ['Queued', 'Generating', 'Success'];
+const STAGE_INDEX = { queued: 0, processing: 1, completed: 2 };
+
+function ProgressStepper({ stage }) {
+  // On completion every step is done (Success included); otherwise light up the
+  // active step and mark all earlier steps done.
+  const activeIndex =
+    stage === 'completed' ? PROGRESS_STEPS.length : STAGE_INDEX[stage] ?? 0;
+  return (
+    <ol className="image-generate__steps">
+      {PROGRESS_STEPS.map((label, index) => {
+        const state =
+          activeIndex > index ? 'done' : activeIndex === index ? 'active' : 'todo';
+        return (
+          <li
+            key={label}
+            className={`image-generate__step image-generate__step--${state}`}
+            aria-current={state === 'active' ? 'step' : undefined}
+          >
+            <span className="image-generate__step-dot" aria-hidden="true">
+              {state === 'done' ? '✓' : index + 1}
+            </span>
+            <span className="image-generate__step-label">{label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// Never let the reported stage move backwards (a stale gate "queued" must not
+// yank a "processing" job back to step one).
+function advanceStage(current, next) {
+  if (!(next in STAGE_INDEX)) return current;
+  if ((STAGE_INDEX[current] ?? -1) >= STAGE_INDEX[next]) return current;
+  return next;
+}
 
 function formatDate(value) {
   const date = new Date(value);
@@ -24,6 +69,7 @@ export default function ImageGeneratePage() {
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusLabel, setStatusLabel] = useState('');
+  const [stage, setStage] = useState('queued');
   const [progressPercent, setProgressPercent] = useState(0);
   const [quota, setQuota] = useState(null);
   const [result, setResult] = useState(null); // { image, seed, promptId, jobId, prompt, negativePrompt }
@@ -136,6 +182,7 @@ export default function ImageGeneratePage() {
     if (job.status === 'queued' || job.status === 'processing') {
       setLoading(true);
       setStatusLabel(STATUS_LABELS[job.status]);
+      setStage(job.status === 'processing' ? 'processing' : 'queued');
       setProgressPercent(job.progress?.percent ?? 0);
       await pollStatus(job.jobId, job.promptId);
       return;
@@ -182,6 +229,7 @@ export default function ImageGeneratePage() {
     setResult(null);
     setLoading(true);
     setStatusLabel(STATUS_LABELS[job.status] || STATUS_LABELS.processing);
+    setStage(job.status === 'processing' ? 'processing' : 'queued');
     setProgressPercent(job.progress?.percent ?? 0);
     await pollStatus(job.jobId, job.promptId);
   }
@@ -224,6 +272,7 @@ export default function ImageGeneratePage() {
             });
             if (data.image) ensureThumbnail(data.jobId, data.image);
             setProgressPercent(100);
+            setStage('completed');
             setStatusLabel('');
             setLoading(false);
             await refreshHistory();
@@ -240,11 +289,14 @@ export default function ImageGeneratePage() {
             }));
             setError(data.error || 'Image generation failed. Please try again.');
             setProgressPercent(0);
+            setStage('queued');
             setStatusLabel('');
             setLoading(false);
             return;
           }
           setStatusLabel(STATUS_LABELS[data.status] || STATUS_LABELS.queued);
+          // Advance the stepper to the gate's reported stage, but never backwards.
+          setStage((current) => advanceStage(current, data.status));
           // Monotonic progress: the bar only ever moves forward, so an out-of-order
           // poll (or a gate status that briefly lags) can never make it drop.
           const reported = Number(data.progress?.percent);
@@ -267,6 +319,7 @@ export default function ImageGeneratePage() {
     setResult(null);
     setLoading(true);
     setStatusLabel(STATUS_LABELS.queued);
+    setStage('queued');
 
     try {
       const response = await fetch('/api/image/generate', {
@@ -413,6 +466,7 @@ export default function ImageGeneratePage() {
 
         {loading ? (
           <div className="image-generate__status" aria-live="polite">
+            <ProgressStepper stage={stage} />
             <div
               className="image-generate__bar"
               role="progressbar"
@@ -448,6 +502,7 @@ export default function ImageGeneratePage() {
 
         {result ? (
           <figure className="image-generate__result">
+            <ProgressStepper stage="completed" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={result.image} alt="Generated image" className="image-generate__img" />
           </figure>
