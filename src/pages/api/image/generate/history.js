@@ -8,7 +8,12 @@ function normalizeEmail(email) {
 
 function requestedLimit(value) {
   const parsed = Number.parseInt(String(value || ''), 10);
-  return Number.isSafeInteger(parsed) ? Math.min(50, Math.max(1, parsed)) : 20;
+  return Number.isSafeInteger(parsed) ? Math.min(50, Math.max(1, parsed)) : 12;
+}
+
+function requestedPage(value) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isSafeInteger(parsed) ? Math.max(1, parsed) : 1;
 }
 
 export default async function handler(req, res) {
@@ -31,6 +36,19 @@ export default async function handler(req, res) {
   }
 
   const limit = requestedLimit(req.query?.limit);
-  const jobs = await listJobsByOwner(email, { limit });
-  return res.status(200).json({ jobs });
+  const page = requestedPage(req.query?.page);
+  const offset = (page - 1) * limit;
+  const { jobs, total, limit: appliedLimit, offset: appliedOffset } = await listJobsByOwner(email, {
+    limit,
+    offset,
+  });
+  const totalPages = Math.max(1, Math.ceil(total / appliedLimit));
+  return res.status(200).json({
+    jobs,
+    total,
+    limit: appliedLimit,
+    offset: appliedOffset,
+    page: appliedOffset / appliedLimit + 1,
+    totalPages,
+  });
 }

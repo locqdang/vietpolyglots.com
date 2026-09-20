@@ -40,12 +40,15 @@ let worker = null;
  */
 export async function processGenerationJob(jobData) {
   const { jobId, payload } = jobData;
-  logger.info({ jobId }, 'image-gen worker: starting (queued for GPU)');
+  logger.info({ jobId, prompt: payload.prompt }, 'image-gen worker: starting (queued for GPU)');
 
   try {
     const submitted = await submitImageGeneration(payload);
     await attachPromptId(jobId, submitted);
-    logger.info({ jobId, promptId: submitted.promptId }, 'image-gen worker: submitted');
+    logger.info(
+      { jobId, promptId: submitted.promptId, prompt: payload.prompt },
+      'image-gen worker: submitted'
+    );
 
     const deadline = Date.now() + 180_000;
     while (Date.now() < deadline) {
@@ -53,7 +56,10 @@ export async function processGenerationJob(jobData) {
       if (status.status === 'completed') {
         const result = { ...status, seed: submitted.seed };
         await completeJob(jobId, result);
-        logger.info({ jobId, promptId: submitted.promptId }, 'image-gen worker: completed');
+        logger.info(
+          { jobId, promptId: submitted.promptId, seed: result.seed, prompt: payload.prompt },
+          'image-gen worker: completed'
+        );
         return result;
       }
       if (status.status === 'failed') {
@@ -67,7 +73,10 @@ export async function processGenerationJob(jobData) {
       error instanceof GateError
         ? error.message
         : 'Image generation failed. Please try again later.';
-    logger.error({ jobId, error: serializeError(error) }, 'image-gen worker: failed');
+    logger.error(
+      { jobId, prompt: payload.prompt, error: serializeError(error) },
+      'image-gen worker: failed'
+    );
     await failJob(jobId, { error: message });
     // Re-throw so BullMQ records the job as failed (and applies retry policy).
     throw error;

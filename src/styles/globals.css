@@ -312,20 +312,51 @@ main {
 /* Buttons */
 .btn {
   display: inline-block;
-  padding: 0.7rem 1rem;
-  border-radius: 0.5rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: 0.6rem;
   border: 1px solid #0f172a;
   background: #0f172a;
   color: #fff;
   text-decoration: none;
   font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.05s ease,
+    opacity 0.15s ease;
 }
 .btn:hover {
-  opacity: 0.9;
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+.btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+.btn:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.5);
+  outline-offset: 2px;
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 .btn--ghost {
   background: transparent;
   color: #0f172a;
+}
+.btn--ghost:hover {
+  background: #f1f5f9;
+  opacity: 1;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
 }
 .btn--sm {
   padding: 0.5rem 0.8rem;
@@ -1401,11 +1432,15 @@ main {
 
 .image-generate__status {
   margin-top: 1rem;
-  padding: 0.9rem 1rem;
+  padding: 1rem;
   border-radius: 0.8rem;
   background: #eff6ff;
   color: #1d4ed8;
   font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .image-generate__errorbox {
@@ -1428,6 +1463,10 @@ main {
 
 .image-generate__result {
   margin: 1.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .image-generate__img {
@@ -1443,7 +1482,7 @@ main {
   color: #64748b;
   font-size: 0.85rem;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
@@ -1519,6 +1558,7 @@ main {
 
 .image-generate__bar {
   height: 0.5rem;
+  width: 100%;
   border-radius: 999px;
   background: #dbeafe;
   overflow: hidden;
@@ -1659,6 +1699,21 @@ main {
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.image-generate__pagination {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.image-generate__pagination-status {
+  color: #64748b;
+  font-size: 0.9rem;
 }
 
 .image-generate__history-thumb {

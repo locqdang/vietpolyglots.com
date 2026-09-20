@@ -10,6 +10,9 @@ const POLL_INTERVAL_MS = 1500;
 // enough to actually see it advance to "Generating" and "Success".
 const POLL_TIMEOUT_MS = 420_000; // hard cap so the UI never hangs
 
+// Recent-generations pagination: keep the list light and let older items page in.
+const HISTORY_PAGE_SIZE = 12;
+
 const STATUS_LABELS = {
   queued: 'Waiting for the GPU…',
   processing: 'Generating your image…',
@@ -75,6 +78,8 @@ export default function ImageGeneratePage() {
   const [result, setResult] = useState(null); // { image, seed, promptId, jobId, prompt, negativePrompt }
   const [activeJob, setActiveJob] = useState(null);
   const [history, setHistory] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [thumbnails, setThumbnails] = useState({});
   const [historyLoading, setHistoryLoading] = useState(true);
   const [retentionDays, setRetentionDays] = useState(30);
@@ -111,18 +116,32 @@ export default function ImageGeneratePage() {
     pollRef.current += 1;
   }
 
-  async function refreshHistory() {
+  // No-argument calls (the initial mount load) always want page 1; every other
+  // caller passes an explicit page. Defaulting to a constant (not the historyPage
+  // state) keeps this stable for the mount-once effect below.
+  async function refreshHistory(page = 1) {
     try {
-      const response = await fetch('/api/image/generate/history?limit=20', {
-        credentials: 'same-origin',
-      });
+      const response = await fetch(
+        `/api/image/generate/history?page=${page}&limit=${HISTORY_PAGE_SIZE}`,
+        { credentials: 'same-origin' }
+      );
       const data = await response.json().catch(() => null);
-      if (mountedRef.current && response.ok) setHistory(data?.jobs || []);
+      if (mountedRef.current && response.ok) {
+        setHistory(data?.jobs || []);
+        setHistoryTotal(data?.total ?? 0);
+        if (typeof data?.page === 'number') setHistoryPage(data.page);
+      }
     } catch {
       // History is secondary to generation; keep the form usable if it fails.
     } finally {
       if (mountedRef.current) setHistoryLoading(false);
     }
+  }
+
+  function goHistoryPage(next) {
+    const target = Math.max(1, next);
+    setHistoryLoading(true);
+    refreshHistory(target);
   }
 
   // Read-only live quota for the owner. Never blocks the form: a failure (e.g.
@@ -275,7 +294,7 @@ export default function ImageGeneratePage() {
             setStage('completed');
             setStatusLabel('');
             setLoading(false);
-            await refreshHistory();
+            await refreshHistory(1);
             return;
           }
           if (data.status === 'failed') {
@@ -340,7 +359,7 @@ export default function ImageGeneratePage() {
       if (response.status === 202 && data?.jobId) {
         setActiveJob({ jobId: data.jobId, promptId: null, status: 'queued' });
         setProgressPercent(0);
-        await refreshHistory();
+        await refreshHistory(1);
         await pollStatus(data.jobId);
         return;
       }
@@ -512,13 +531,17 @@ export default function ImageGeneratePage() {
           <div className="image-generate__history-heading">
             <div>
               <h2 id="image-history-title">Recent generations</h2>
-              <p>Completed images are retained for up to {retentionDays} days.</p>
+              <p>
+                {historyTotal > 0
+                  ? `Showing ${history.length} of ${historyTotal} · retained for up to ${retentionDays} days.`
+                  : `Completed images are retained for up to ${retentionDays} days.`}
+              </p>
             </div>
             <button
               type="button"
               className="btn btn--ghost btn--sm"
               disabled={historyLoading}
-              onClick={refreshHistory}
+              onClick={() => refreshHistory(1)}
             >
               Refresh
             </button>
@@ -527,59 +550,86 @@ export default function ImageGeneratePage() {
           {historyLoading ? <p>Loading history…</p> : null}
           {!historyLoading && history.length === 0 ? <p>No generations yet.</p> : null}
           {history.length > 0 ? (
-            <ul className="image-generate__history-list">
-              {history.map((job) => (
-                <li key={job.jobId} className="image-generate__history-item">
-                  <div className="image-generate__history-thumb">
-                    {job.status === 'completed' && thumbnails[job.jobId] ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={thumbnails[job.jobId]}
-                        alt={`Thumbnail: ${job.prompt}`}
-                        className="image-generate__thumb-img"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="image-generate__history-copy">
-                    <strong>{job.prompt}</strong>
-                    <span>
-                      {STATUS_LABELS[job.status] || job.status}
-                      {job.createdAt ? ` · ${formatDate(job.createdAt)}` : ''}
-                    </span>
-                  </div>
-                  <div className="image-generate__history-actions">
-                    {job.status === 'completed' ? (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        disabled={loading}
-                        onClick={() => loadHistoryJob(job)}
-                      >
-                        Load
-                      </button>
-                    ) : job.status === 'failed' ? (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        disabled={loading || !job.prompt}
-                        onClick={() => tryAgain(job)}
-                      >
-                        Try again
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        disabled={loading || !job.promptId}
-                        onClick={() => resumeJob(job)}
-                      >
-                        Resume
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="image-generate__history-list">
+                {history.map((job) => (
+                  <li key={job.jobId} className="image-generate__history-item">
+                    <div className="image-generate__history-thumb">
+                      {job.status === 'completed' && thumbnails[job.jobId] ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={thumbnails[job.jobId]}
+                          alt={`Thumbnail: ${job.prompt}`}
+                          className="image-generate__thumb-img"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="image-generate__history-copy">
+                      <strong>{job.prompt}</strong>
+                      <span>
+                        {STATUS_LABELS[job.status] || job.status}
+                        {job.createdAt ? ` · ${formatDate(job.createdAt)}` : ''}
+                      </span>
+                    </div>
+                    <div className="image-generate__history-actions">
+                      {job.status === 'completed' ? (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          disabled={loading}
+                          onClick={() => loadHistoryJob(job)}
+                        >
+                          Load
+                        </button>
+                      ) : job.status === 'failed' ? (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          disabled={loading || !job.prompt}
+                          onClick={() => tryAgain(job)}
+                        >
+                          Try again
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          disabled={loading || !job.promptId}
+                          onClick={() => resumeJob(job)}
+                        >
+                          Resume
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {historyTotal > HISTORY_PAGE_SIZE ? (
+                <nav className="image-generate__pagination" aria-label="History pages">
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    disabled={historyLoading || historyPage <= 1}
+                    onClick={() => goHistoryPage(historyPage - 1)}
+                  >
+                    ← Previous
+                  </button>
+                  <span className="image-generate__pagination-status" aria-live="polite">
+                    Page {historyPage} of {Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE))}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    disabled={
+                      historyLoading || historyPage >= Math.ceil(historyTotal / HISTORY_PAGE_SIZE)
+                    }
+                    onClick={() => goHistoryPage(historyPage + 1)}
+                  >
+                    Next →
+                  </button>
+                </nav>
+              ) : null}
+            </>
           ) : null}
         </section>
       </section>

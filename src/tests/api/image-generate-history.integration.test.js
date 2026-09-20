@@ -47,24 +47,29 @@ describe('GET /api/image/generate/history', () => {
 
   it('returns recent owner-scoped jobs without embedding image data', async () => {
     readSession.mockReturnValue(AUTHED);
-    listJobsByOwner.mockResolvedValue([
-      {
-        jobId: 'img_1',
-        promptId: 'prompt_abc',
-        prompt: 'a red dragon',
-        negativePrompt: 'blurry',
-        status: 'completed',
-        seed: 42,
-        createdAt: new Date('2026-09-20T10:00:00Z'),
-        updatedAt: new Date('2026-09-20T10:01:00Z'),
-      },
-    ]);
+    listJobsByOwner.mockResolvedValue({
+      jobs: [
+        {
+          jobId: 'img_1',
+          promptId: 'prompt_abc',
+          prompt: 'a red dragon',
+          negativePrompt: 'blurry',
+          status: 'completed',
+          seed: 42,
+          createdAt: new Date('2026-09-20T10:00:00Z'),
+          updatedAt: new Date('2026-09-20T10:01:00Z'),
+        },
+      ],
+      total: 1,
+      limit: 10,
+      offset: 0,
+    });
 
     const res = createMockRes();
     await historyHandler({ method: 'GET', query: { limit: '10' } }, res);
 
     expect(res.statusCode).toBe(200);
-    expect(listJobsByOwner).toHaveBeenCalledWith('loc@example.com', { limit: 10 });
+    expect(listJobsByOwner).toHaveBeenCalledWith('loc@example.com', { limit: 10, offset: 0 });
     expect(res.body.jobs[0]).toMatchObject({
       jobId: 'img_1',
       promptId: 'prompt_abc',
@@ -72,13 +77,37 @@ describe('GET /api/image/generate/history', () => {
       negativePrompt: 'blurry',
     });
     expect(res.body.jobs[0].image).toBeUndefined();
+    expect(res.body).toMatchObject({ total: 1, page: 1, totalPages: 1, limit: 10, offset: 0 });
   });
 
   it('clamps the requested history limit', async () => {
     readSession.mockReturnValue(AUTHED);
-    listJobsByOwner.mockResolvedValue([]);
+    listJobsByOwner.mockResolvedValue({ jobs: [], total: 0, limit: 50, offset: 0 });
     const res = createMockRes();
     await historyHandler({ method: 'GET', query: { limit: '500' } }, res);
-    expect(listJobsByOwner).toHaveBeenCalledWith('loc@example.com', { limit: 50 });
+    expect(listJobsByOwner).toHaveBeenCalledWith('loc@example.com', { limit: 50, offset: 0 });
+  });
+
+  it('computes page, offset and totalPages from the requested page', async () => {
+    readSession.mockReturnValue(AUTHED);
+    listJobsByOwner.mockResolvedValue({
+      jobs: [{ jobId: 'img_2', prompt: 'page two' }],
+      total: 25,
+      limit: 12,
+      offset: 12,
+    });
+
+    const res = createMockRes();
+    await historyHandler({ method: 'GET', query: { page: '2', limit: '12' } }, res);
+
+    expect(listJobsByOwner).toHaveBeenCalledWith('loc@example.com', { limit: 12, offset: 12 });
+    expect(res.body).toMatchObject({ total: 25, page: 2, totalPages: 3, limit: 12, offset: 12 });
+  });
+
+  it('clamps page to at least one', async () => {
+    readSession.mockReturnValue(AUTHED);
+    listJobsByOwner.mockResolvedValue({ jobs: [], total: 0, limit: 12, offset: 0 });
+    await historyHandler({ method: 'GET', query: { page: '0' } }, createMockRes());
+    expect(listJobsByOwner).toHaveBeenCalledWith('loc@example.com', { limit: 12, offset: 0 });
   });
 });

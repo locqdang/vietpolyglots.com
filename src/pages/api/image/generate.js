@@ -110,6 +110,6 @@ export default async function handler(req, res) {
     }
   }
 
-  log.info({ jobId }, 'Image generate: queued');
+  log.info({ jobId, prompt: payload.prompt }, 'Image generate: queued');
   return res.status(202).json({ jobId });
 }

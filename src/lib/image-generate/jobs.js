@@ -239,11 +239,19 @@ export async function getJobByPromptIdOwner(promptId, userEmail) {
 }
 
 /**
- * Return recent owner-scoped jobs without large image payloads. Active jobs and
- * retained completed jobs are merged and deduplicated by jobId.
+ * Return owner-scoped jobs without large image payloads, newest first, with page
+ * pagination (limit/offset). Active jobs and retained completed jobs are merged
+ * and deduplicated by jobId. The image field is projected out, so fetching all of
+ * one owner's records is cheap; we merge/dedupe in memory and then slice the page.
+ *
+ * @returns {Promise<{ jobs: object[], total: number, limit: number, offset: number }>}
  */
-export async function listJobsByOwner(userEmail, { limit = 20 } = {}) {
+export async function listJobsByOwner(userEmail, { limit = 20, offset = 0 } = {}) {
   const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+  const safeOffset = Math.min(
+    10_000,
+    Math.max(0, Number.isFinite(Number(offset)) ? Number(offset) : 0)
+  );
   const projection = {
     _id: 0,
     jobId: 1,
@@ -258,19 +266,23 @@ export async function listJobsByOwner(userEmail, { limit = 20 } = {}) {
   };
   const col = await collection();
   const history = await historyCollection();
+
+  // No image payloads, so it is cheap to pull a user's full (retained) set and
+  // dedupe in memory — an in-flight job can appear in both collections.
   const [activeJobs, retainedJobs] = await Promise.all([
-    col.find({ userEmail }).project(projection).sort({ createdAt: -1 }).limit(safeLimit).toArray(),
-    history
-      .find({ userEmail })
-      .project(projection)
-      .sort({ createdAt: -1 })
-      .limit(safeLimit)
-      .toArray(),
+    col.find({ userEmail }).project(projection).toArray(),
+    history.find({ userEmail }).project(projection).toArray(),
   ]);
 
   const jobs = new Map();
   for (const job of [...retainedJobs, ...activeJobs]) jobs.set(job.jobId, job);
-  return [...jobs.values()]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, safeLimit);
+  const all = [...jobs.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  return {
+    jobs: all.slice(safeOffset, safeOffset + safeLimit),
+    total: all.length,
+    limit: safeLimit,
+    offset: safeOffset,
+  };
 }
