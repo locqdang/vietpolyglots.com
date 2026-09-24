@@ -10,14 +10,19 @@ const { signInWithMagicLink } = require('./helpers/route-auth');
 const ASSISTANT_URL = '**/api/image/prompt/assistant';
 
 test.describe('Services → Image Generate → Prompt Assistant', () => {
-  test('redirects unauthenticated users to login (assistant not reachable signed out)', async ({ page }) => {
+  test('redirects unauthenticated users to login (assistant not reachable signed out)', async ({
+    page,
+  }) => {
     await page.goto('/image-generate');
 
     await page.waitForURL('**/login?redirect=*');
     await expect(page).toHaveURL(/\/login\?redirect=%2Fimage-generate$/);
   });
 
-  test('blocks the assistant on an empty idea (client-side, no API call)', async ({ page, request }) => {
+  test('blocks the assistant on an empty idea (client-side, no API call)', async ({
+    page,
+    request,
+  }) => {
     let apiCalled = false;
     page.on('request', (req) => {
       if (req.method() === 'POST' && req.url().includes('/api/image/prompt/assistant')) {
@@ -41,7 +46,10 @@ test.describe('Services → Image Generate → Prompt Assistant', () => {
     expect(apiCalled).toBe(false);
   });
 
-  test('populates prompt + negative on a successful assistant call (stubbed)', async ({ page, request }) => {
+  test('populates prompt + negative on a successful assistant call (stubbed)', async ({
+    page,
+    request,
+  }) => {
     // Stub the assistant response deterministically (no real model / GPU).
     await page.route(ASSISTANT_URL, (route) => {
       route.fulfill({

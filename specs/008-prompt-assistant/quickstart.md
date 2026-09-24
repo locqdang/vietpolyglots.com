@@ -13,15 +13,15 @@ Runnable validation scenarios that prove the feature works end-to-end. This is a
 
 ## Configuration (env, names only)
 
-| Var | Default | Purpose |
-| --- | --- | --- |
-| `LLM_GATE_URL` | `http://gpu-gate:8081` | LLM gate base URL (server-only). |
-| `PROMPT_ASSISTANT_MODEL` | `Qwen3.8-27B-Uncensored-MTP-Q5_K_P` | Model id. |
-| `PROMPT_ASSISTANT_TIMEOUT_MS` | `300000` | Per-attempt model timeout, including cold model loading. |
-| `PROMPT_ASSISTANT_RATE_LIMIT_MAX` | `30` | Assistant requests / window per user. |
-| `PROMPT_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS` | `3600` | Window seconds. |
-| `PROMPT_ASSISTANT_MAX_IDEA` | `1000` | Max idea length. |
-| `PROMPT_ASSISTANT_MAX_PROMPT` | `2000` | Max per generated-field length. |
+| Var                                          | Default                             | Purpose                                                  |
+| -------------------------------------------- | ----------------------------------- | -------------------------------------------------------- |
+| `LLM_GATE_URL`                               | `http://gpu-gate:8081`              | LLM gate base URL (server-only).                         |
+| `PROMPT_ASSISTANT_MODEL`                     | `Qwen3.8-27B-Uncensored-MTP-Q5_K_P` | Model id.                                                |
+| `PROMPT_ASSISTANT_TIMEOUT_MS`                | `300000`                            | Per-attempt model timeout, including cold model loading. |
+| `PROMPT_ASSISTANT_RATE_LIMIT_MAX`            | `30`                                | Assistant requests / window per user.                    |
+| `PROMPT_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS` | `3600`                              | Window seconds.                                          |
+| `PROMPT_ASSISTANT_MAX_IDEA`                  | `1000`                              | Max idea length.                                         |
+| `PROMPT_ASSISTANT_MAX_PROMPT`                | `2000`                              | Max per generated-field length.                          |
 
 ## Automated verification
 
@@ -41,6 +41,7 @@ npm run test:e2e
 ```
 
 Expected:
+
 - Unit tests for `buildPromptAssistantRequest` prove the idea lands **only** in the user message and empty/oversized ideas are rejected.
 - Unit tests for `parsePromptAssistantResponse` prove non-JSON / missing / wrong-type / extra-key / over-limit / quoted-wrapper / injection inputs yield either a valid text-only pair or an error — never a raw pass-through.
 - Integration tests prove `401` (no session), `400` (empty/oversized idea), `429` + `Retry-After` (over limit), `200` (valid pair), and `422` (invalid model output, no rendered output). The model host/port never appears in a response.

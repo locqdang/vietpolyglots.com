@@ -17,11 +17,12 @@ A single new endpoint. It is the only interface this feature exposes to the brow
 
 ## Request body
 
-| Field | Type | Required | Constraint | Notes |
-| --- | --- | --- | --- | --- |
-| `idea` | string | yes | non-empty after trim; length ≤ `PROMPT_ASSISTANT_MAX_IDEA` (default 1000) | The short user idea. Treated strictly as data. |
+| Field  | Type   | Required | Constraint                                                                | Notes                                          |
+| ------ | ------ | -------- | ------------------------------------------------------------------------- | ---------------------------------------------- |
+| `idea` | string | yes      | non-empty after trim; length ≤ `PROMPT_ASSISTANT_MAX_IDEA` (default 1000) | The short user idea. Treated strictly as data. |
 
 Example:
+
 ```json
 { "idea": "a red fox in the snow" }
 ```
@@ -40,46 +41,64 @@ Example:
 ## Responses
 
 ### `200 OK`
+
 ```json
-{ "prompt": "A red fox standing in a snowy landscape, thick orange fur, ...", "negativePrompt": "blurry, low quality, deformed, extra limbs, watermark, text" }
+{
+  "prompt": "A red fox standing in a snowy landscape, thick orange fur, ...",
+  "negativePrompt": "blurry, low quality, deformed, extra limbs, watermark, text"
+}
 ```
+
 - `prompt`: refined positive prompt (string, non-empty, ≤ `PROMPT_ASSISTANT_MAX_PROMPT`).
 - `negativePrompt`: negative prompt (string, may be empty, ≤ `PROMPT_ASSISTANT_MAX_PROMPT`).
 
 ### `400 Bad Request`
+
 ```json
 { "error": "idea is required and must be a non-empty string" }
 ```
+
 or `{ "error": "idea must not exceed 1000 characters" }`
 
 ### `401 Unauthorized`
+
 ```json
 { "error": "Unauthorized" }
 ```
 
 ### `422 Unprocessable Entity` (model returned non-conforming output)
+
 ```json
 { "error": "The assistant could not produce a usable prompt. Please try again or rephrase." }
 ```
+
 - The raw/invalid model output is **never** included.
 
 ### `429 Too Many Requests`
+
 Headers: `Retry-After: <seconds>`.
+
 ```json
-{ "error": "You have reached the prompt assistant limit. Try again in 30 seconds.", "retryAfterSeconds": 30 }
+{
+  "error": "You have reached the prompt assistant limit. Try again in 30 seconds.",
+  "retryAfterSeconds": 30
+}
 ```
 
 ### `502 Bad Gateway` (gate/model unreachable or HTTP error)
+
 ```json
 { "error": "The prompt assistant is temporarily unavailable. Please try again later." }
 ```
 
 ### `503 Service Unavailable` (rate limiter / Redis unavailable — fail closed)
+
 ```json
 { "error": "Service temporarily unavailable. Please try again later." }
 ```
 
 ### `504 Gateway Timeout` (model call exceeded the timeout bound)
+
 ```json
 { "error": "The assistant took too long to respond. Please try again." }
 ```

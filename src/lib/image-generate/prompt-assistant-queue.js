@@ -37,10 +37,9 @@ const GATE_STAGE_TO_PUBLIC_STATUS = {
 async function readGateStage(requestId) {
   const { gateUrl } = getPromptAssistantConfig();
   try {
-    const response = await fetch(
-      `${gateUrl}/_gpu_gate/requests/${encodeURIComponent(requestId)}`,
-      { cache: 'no-store' }
-    );
+    const response = await fetch(`${gateUrl}/_gpu_gate/requests/${encodeURIComponent(requestId)}`, {
+      cache: 'no-store',
+    });
     if (!response.ok) return '';
     const body = await response.json();
     return typeof body?.state === 'string' ? body.state : '';
@@ -71,7 +70,10 @@ export async function processPromptAssistantJob(job) {
     const raw = await generatePromptPair(job.data.chatRequest, undefined, requestId);
     const parsed = parsePromptAssistantResponse(raw);
     if (!parsed.ok) {
-      throw new PromptAssistantGateError(422, 'The assistant could not produce a usable prompt. Please try again.');
+      throw new PromptAssistantGateError(
+        422,
+        'The assistant could not produce a usable prompt. Please try again.'
+      );
     }
     return { prompt: parsed.prompt, negativePrompt: parsed.negativePrompt };
   } finally {
@@ -101,14 +103,25 @@ export function ensurePromptAssistantWorkerStarted() {
     connection: connection(),
     concurrency: 1,
   });
-  worker.on('error', (error) => logger.error({ error: serializeError(error) }, 'prompt-assistant worker error'));
-  worker.on('failed', (job, error) => logger.warn({ jobId: job?.id, error: serializeError(error) }, 'prompt-assistant queued job attempt failed'));
+  worker.on('error', (error) =>
+    logger.error({ error: serializeError(error) }, 'prompt-assistant worker error')
+  );
+  worker.on('failed', (job, error) =>
+    logger.warn(
+      { jobId: job?.id, error: serializeError(error) },
+      'prompt-assistant queued job attempt failed'
+    )
+  );
   return worker;
 }
 
 export async function enqueuePromptAssistant({ jobId, ownerId, chatRequest }) {
   ensurePromptAssistantWorkerStarted();
-  const job = await getPromptAssistantQueue().add('generate-prompt', { ownerId, chatRequest }, { jobId });
+  const job = await getPromptAssistantQueue().add(
+    'generate-prompt',
+    { ownerId, chatRequest },
+    { jobId }
+  );
   return { jobId: job.id || jobId };
 }
 

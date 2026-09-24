@@ -20,7 +20,7 @@ Security is a first-class requirement: the user's short idea is treated strictly
 
 **Primary Dependencies**: **No new runtime dependencies.** Reuse `ioredis` (rate limiting), `next`/`react` (page + API route), `pino` (logging via `src/lib/logger.js`). The model is reached with the global `fetch` (same as `gate-client.js`). No `openai`/SDK package is added — the OpenAI-compatible endpoint is a plain `POST` with JSON.
 
-**Storage**: **None new.** Redis is reused only for the assistant's per-user rate-limit counter (a separate key/DB-1 counter from image generation). No MongoDB job record, no persistence of the generated prompts (the existing image-generation history persists the *final* prompt the user actually generates with).
+**Storage**: **None new.** Redis is reused only for the assistant's per-user rate-limit counter (a separate key/DB-1 counter from image generation). No MongoDB job record, no persistence of the generated prompts (the existing image-generation history persists the _final_ prompt the user actually generates with).
 
 **Testing**: **Vitest** for unit (pure helpers) and integration (API handler with mocked deps) — matches `src/tests/lib/*` and `src/tests/api/*`. **Playwright** for E2E (config exists at `playwright.config.js`, `testDir: ./e2e`, dev server on `127.0.0.1:3100`); the assistant's full browser flow is E2E + a manual live-model smoke (the model/gate is a real, slow, external dependency and is stubbed in automated tests).
 
@@ -31,6 +31,7 @@ Security is a first-class requirement: the user's short idea is treated strictly
 **Performance Goals**: A single assistant call is one model chat completion (a 27B model; expect seconds to ~1–2 minutes on first load). The page shows a loading state for the duration. The request is **timeout-bounded** (default `90s`, env-overridable) so the UI never hangs. Because the gate **serializes GPU access** (a single GPU lease), an in-flight assistant call and an in-flight image generation do not run concurrently.
 
 **Constraints**:
+
 - The model/gate endpoint is **server-only**. The browser never reaches it directly and never learns its host/port (FR-013).
 - The LLM gate is currently bound to the GPU host's **loopback** (`127.0.0.1:8081`); the `nextjs` container is on a different Docker network and cannot reach it as-is. Reachability is resolved by a **private, shared internal Docker network** (see Research R1) so the backend calls the gate by service name while it stays off the public internet and the LAN.
 - The user's short idea must be bounded (input length) and the generated output must be bounded (each field) (FR-004, FR-009).
@@ -51,7 +52,8 @@ Security is a first-class requirement: the user's short idea is treated strictly
 - **Manual Smoke**: With the gate/model reachable, run a real request from the browser (e.g. "a red fox in the snow") and confirm a sensible refined prompt + non-empty negative prompt populate the fields; confirm an injection-style idea does not change behavior or surface raw model text; confirm the model host/port never appears in page HTML, network responses, or client code.
 
 **Test-First Targets**:
-1. `buildPromptAssistantRequest` — stable, pure, cheap; it *is* the prompt-injection defense. Start with failing unit tests (data-position isolation, empty/oversized rejection).
+
+1. `buildPromptAssistantRequest` — stable, pure, cheap; it _is_ the prompt-injection defense. Start with failing unit tests (data-position isolation, empty/oversized rejection).
 2. `parsePromptAssistantResponse` — the second security line; pure logic. Start with failing unit tests including explicit injection / non-conforming / markup cases.
 3. API auth gate (`401`) and rate-limit (`429`) handler paths — clear, stable permission rules; start with failing integration tests.
 4. E2E full browser flow — verified after implementation (depends on the rendered page + a stubbed assistant call).

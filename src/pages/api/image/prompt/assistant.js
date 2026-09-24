@@ -54,10 +54,7 @@ export default async function handler(req, res) {
   try {
     rateLimit = await checkPromptAssistantRateLimit(email);
   } catch (err) {
-    logger.error(
-      { error: serializeError(err) },
-      'Prompt assistant: rate limiter unavailable'
-    );
+    logger.error({ error: serializeError(err) }, 'Prompt assistant: rate limiter unavailable');
     return res
       .status(503)
       .json({ error: 'Service temporarily unavailable. Please try again later.' });
@@ -83,7 +80,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     logger.error({ error: serializeError(err) }, 'Prompt assistant: enqueue failed');
-    return res.status(503).json({ error: 'Prompt queue is temporarily unavailable. Please try again.' });
+    return res
+      .status(503)
+      .json({ error: 'Prompt queue is temporarily unavailable. Please try again.' });
   }
 
   log.info({ jobId }, 'Prompt assistant: queued');

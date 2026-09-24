@@ -18,9 +18,7 @@ function positiveIntegerMs(value, fallback) {
 // resolve; production runs inside Compose on the gate's private network. An
 // explicit LLM_GATE_URL always wins for other topologies.
 function defaultLlmGateUrl() {
-  return process.env.NODE_ENV === 'production'
-    ? 'http://gpu-gate:8081'
-    : 'http://127.0.0.1:8081';
+  return process.env.NODE_ENV === 'production' ? 'http://gpu-gate:8081' : 'http://127.0.0.1:8081';
 }
 
 export function getPromptAssistantConfig() {

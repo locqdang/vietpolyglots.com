@@ -459,7 +459,9 @@ export default function ImageGeneratePage() {
           }
           if (status.status === 'failed') {
             setAssistantStatus('failed');
-            setAssistantError(status.error || 'The assistant could not produce a prompt. Please try again.');
+            setAssistantError(
+              status.error || 'The assistant could not produce a prompt. Please try again.'
+            );
             setAssistantHint('');
             return;
           }
@@ -485,7 +487,9 @@ export default function ImageGeneratePage() {
           } else if (nextStatus === 'retrying') {
             const attempt = Number(status.attemptsMade) || 1;
             const maximum = Number(status.attemptsMax) || 20;
-            setAssistantHint(`Prompt attempt ${attempt} failed. Retrying automatically (${attempt}/${maximum})…`);
+            setAssistantHint(
+              `Prompt attempt ${attempt} failed. Retrying automatically (${attempt}/${maximum})…`
+            );
           } else {
             setAssistantHint('Queued for the prompt-generation service…');
           }
@@ -605,7 +609,7 @@ export default function ImageGeneratePage() {
             />
           </details>
 
-           <div className="image-generate__assistant">
+          <div className="image-generate__assistant">
             <label className="image-generate__label" htmlFor="idea">
               Not sure how to phrase it? Describe your idea
             </label>

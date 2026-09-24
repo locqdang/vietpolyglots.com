@@ -14,7 +14,9 @@ export default async function handler(req, res) {
   });
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const email = String(readSession(req)?.user?.email || '').trim().toLowerCase();
+  const email = String(readSession(req)?.user?.email || '')
+    .trim()
+    .toLowerCase();
   if (!email) return res.status(401).json({ error: 'Unauthorized' });
   const jobId = typeof req.query?.jobId === 'string' ? req.query.jobId : '';
   if (!jobId) return res.status(404).json({ error: 'Job not found' });
@@ -23,10 +25,7 @@ export default async function handler(req, res) {
   try {
     job = await getPromptAssistantJob(jobId, promptAssistantOwnerId(email));
   } catch (error) {
-    logger.error(
-      { jobId, error: serializeError(error) },
-      'Prompt assistant: status lookup failed'
-    );
+    logger.error({ jobId, error: serializeError(error) }, 'Prompt assistant: status lookup failed');
     return res.status(503).json({
       error: 'Prompt status is temporarily unavailable. The queued job will continue processing.',
     });

@@ -87,7 +87,7 @@ The page and API surface clear, actionable feedback when the short idea is missi
 - **Model/gate down or slow**: The backend enforces a request timeout bound; a timeout/unavailable error is surfaced and the user can retry. (The gate also holds a GPU lease during the call, so assistant calls and image generations are serialized by the gate.)
 - **Rapid repeated clicks**: The assistant control is disabled while a request is in flight to prevent overlapping model calls.
 - **No secret/host leakage**: The model's base URL, host, port, and model identity are server-only; the browser never learns them and never calls the gate/model directly.
-- **Relationship to the consent notice**: The assistant only *drafts* a prompt; the user still sees and (by design) reviews the generated text before generating, and the existing image-generation consent notice and validation still apply at generation time.
+- **Relationship to the consent notice**: The assistant only _drafts_ a prompt; the user still sees and (by design) reviews the generated text before generating, and the existing image-generation consent notice and validation still apply at generation time.
 
 ## Requirements _(mandatory)_
 
@@ -117,7 +117,7 @@ The page and API surface clear, actionable feedback when the short idea is missi
 ### Key Entities _(include if feature involves data)_
 
 - **Prompt Idea**: The user-supplied short, free-text description (bounded length) that the assistant expands. Not persisted; transient per request.
-- **Generated Prompt Pair**: The assistant's output — a refined positive prompt and a negative prompt, each a bounded-length string. Used only to pre-fill the form; not persisted by the assistant itself (the existing generation history persists the *final* prompt the user actually generates with).
+- **Generated Prompt Pair**: The assistant's output — a refined positive prompt and a negative prompt, each a bounded-length string. Used only to pre-fill the form; not persisted by the assistant itself (the existing generation history persists the _final_ prompt the user actually generates with).
 - **Qwen Uncensored Model (via GPU gate)**: The `Qwen` uncensored model exposed at the `gpu-gate` service through its OpenAI-compatible chat endpoint. The app is a thin, server-side caller of this endpoint; the model identifier and base URL come from environment configuration. The gate owns GPU serialization, so assistant calls and image generations do not run concurrently on the GPU.
 - **Assistant Rate-Limit State**: A per-user, Redis-backed counter (separate from the image-generation counter) with a configurable limit and window.
 

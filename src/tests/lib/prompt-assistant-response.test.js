@@ -66,8 +66,7 @@ describe('parsePromptAssistantResponse (strict output validation)', () => {
 
   it('rejects an empty prompt', () => {
     expect(
-      parsePromptAssistantResponse(JSON.stringify({ prompt: '  ', negative_prompt: 'x' }), cfg)
-        .ok
+      parsePromptAssistantResponse(JSON.stringify({ prompt: '  ', negative_prompt: 'x' }), cfg).ok
     ).toBe(false);
   });
 
@@ -123,7 +122,10 @@ describe('parsePromptAssistantResponse (strict output validation)', () => {
   it('returns a text-only pair for markup-laden model output (no raw pass-through)', () => {
     // Even if the model echoes markup, we return it only as plain text strings in a
     // bounded schema — the client renders these as text, never as HTML.
-    const raw = JSON.stringify({ prompt: 'a <b>bold</b> cat', negative_prompt: '<script>x</script>' });
+    const raw = JSON.stringify({
+      prompt: 'a <b>bold</b> cat',
+      negative_prompt: '<script>x</script>',
+    });
     const result = parsePromptAssistantResponse(raw, cfg);
     expect(result.ok).toBe(true);
     expect(result.prompt).toBe('a <b>bold</b> cat');
