@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 const MAX_PROMPT = 10_000;
+// The assistant takes a *short* idea (a few words) and expands it. Kept small so
+// a one-line request can't be weaponized to burn a lot of LLM tokens.
+const MAX_IDEA = 1000;
 const POLL_INTERVAL_MS = 1500;
 // Generous because the real wait is the GPU gate: a render is ~30s, but the job
 // first waits for the GPU while the LLM holds it (observed holds up to ~5 min).
@@ -88,6 +91,13 @@ export default function ImageGeneratePage() {
   const [rateLimit, setRateLimit] = useState(null);
   const [error, setError] = useState('');
   const [clientError, setClientError] = useState('');
+  // Prompt-assistant state (separate from the generate flow so the two can't
+  // interfere: the assistant only *drafts* a prompt, it never generates an image).
+  const [idea, setIdea] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantStatus, setAssistantStatus] = useState('idle');
+  const [assistantError, setAssistantError] = useState('');
+  const [assistantHint, setAssistantHint] = useState('');
   const pollRef = useRef(0);
   const mountedRef = useRef(true);
   const thumbRef = useRef(new Set());
@@ -366,6 +376,142 @@ export default function ImageGeneratePage() {
     }
   }
 
+  async function handleAssistant(event) {
+    event.preventDefault();
+    if (assistantLoading) return;
+
+    setAssistantError('');
+    setAssistantHint('');
+
+    const trimmed = idea.trim();
+    if (!trimmed) {
+      setAssistantError('Type a short idea first, then ask for help.');
+      return;
+    }
+    if (trimmed.length > MAX_IDEA) {
+      setAssistantError('Keep your idea under 1,000 characters.');
+      return;
+    }
+
+    setAssistantLoading(true);
+    setAssistantStatus('submitting');
+    try {
+      const response = await fetch('/api/image/prompt/assistant', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idea: trimmed }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (response.status === 202 && data?.jobId) {
+        setAssistantStatus('queued');
+        setAssistantHint('Queued for the prompt-generation service…');
+        const deadline = Date.now() + 10 * 60 * 1000;
+        let consecutivePollFailures = 0;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          let statusResponse;
+          try {
+            statusResponse = await fetch(
+              `/api/image/prompt/assistant/${encodeURIComponent(data.jobId)}`,
+              { credentials: 'same-origin' }
+            );
+          } catch {
+            consecutivePollFailures += 1;
+            if (consecutivePollFailures >= 10) {
+              throw new Error(
+                'The prompt is still queued, but its status could not be checked. Please refresh and try again.'
+              );
+            }
+            setAssistantStatus('reconnecting');
+            setAssistantHint('Prompt queued. Reconnecting to check its status…');
+            continue;
+          }
+
+          const status = await statusResponse.json().catch(() => null);
+          if (!statusResponse.ok) {
+            // A queued job must survive temporary API/server trouble. Keep polling
+            // on retryable responses instead of abandoning a job that is still
+            // processing successfully in Redis.
+            if (statusResponse.status === 429 || statusResponse.status >= 500) {
+              consecutivePollFailures += 1;
+              if (consecutivePollFailures >= 10) {
+                throw new Error(
+                  status?.error ||
+                    'The prompt is still queued, but its status could not be checked. Please refresh and try again.'
+                );
+              }
+              setAssistantStatus('reconnecting');
+              setAssistantHint('Prompt queued. Reconnecting to check its status…');
+              continue;
+            }
+            throw new Error(status?.error || 'Could not check the queued prompt.');
+          }
+
+          consecutivePollFailures = 0;
+          if (status.status === 'completed' && status.prompt) {
+            setAssistantStatus('completed');
+            setPrompt(status.prompt);
+            if (typeof status.negativePrompt === 'string') setNegative(status.negativePrompt);
+            setAssistantHint('Filled your prompt from your idea. Review and edit, then generate.');
+            return;
+          }
+          if (status.status === 'failed') {
+            setAssistantStatus('failed');
+            setAssistantError(status.error || 'The assistant could not produce a prompt. Please try again.');
+            setAssistantHint('');
+            return;
+          }
+          const nextStatus = [
+            'queued',
+            'starting',
+            'waiting_for_gpu',
+            'preparing_gpu',
+            'processing',
+            'retrying',
+          ].includes(status.status)
+            ? status.status
+            : 'queued';
+          setAssistantStatus(nextStatus);
+          if (nextStatus === 'starting') {
+            setAssistantHint('Starting the prompt assistant…');
+          } else if (nextStatus === 'waiting_for_gpu') {
+            setAssistantHint('Waiting for the GPU…');
+          } else if (nextStatus === 'preparing_gpu') {
+            setAssistantHint('Preparing the prompt model…');
+          } else if (nextStatus === 'processing') {
+            setAssistantHint('Writing your prompt…');
+          } else if (nextStatus === 'retrying') {
+            const attempt = Number(status.attemptsMade) || 1;
+            const maximum = Number(status.attemptsMax) || 20;
+            setAssistantHint(`Prompt attempt ${attempt} failed. Retrying automatically (${attempt}/${maximum})…`);
+          } else {
+            setAssistantHint('Queued for the prompt-generation service…');
+          }
+        }
+        setAssistantStatus('failed');
+        setAssistantError('Prompt generation is taking longer than expected. Please try again.');
+        setAssistantHint('');
+        return;
+      }
+
+      setAssistantStatus('failed');
+      setAssistantError(
+        data?.error || 'The assistant could not queue your prompt. Please try again.'
+      );
+    } catch (error) {
+      setAssistantStatus('failed');
+      setAssistantError(
+        error instanceof Error
+          ? error.message
+          : 'Could not reach the server. Please check your connection and try again.'
+      );
+    } finally {
+      setAssistantLoading(false);
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     if (loading) return;
@@ -458,6 +604,57 @@ export default function ImageGeneratePage() {
               onChange={(event) => setNegative(event.target.value)}
             />
           </details>
+
+           <div className="image-generate__assistant">
+            <label className="image-generate__label" htmlFor="idea">
+              Not sure how to phrase it? Describe your idea
+            </label>
+            <div className="image-generate__assistant-row">
+              <input
+                id="idea"
+                name="idea"
+                type="text"
+                className="image-generate__assistant-input"
+                maxLength={MAX_IDEA}
+                placeholder="e.g. a cozy coffee shop on a rainy evening"
+                value={idea}
+                disabled={assistantLoading}
+                onChange={(event) => {
+                  setIdea(event.target.value);
+                  if (assistantError) setAssistantError('');
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={handleAssistant}
+                disabled={assistantLoading}
+              >
+                {assistantLoading
+                  ? {
+                      submitting: 'Queueing…',
+                      queued: 'Queued…',
+                      starting: 'Starting…',
+                      waiting_for_gpu: 'Waiting for GPU…',
+                      preparing_gpu: 'Preparing model…',
+                      processing: 'Writing…',
+                      retrying: 'Retrying…',
+                      reconnecting: 'Reconnecting…',
+                    }[assistantStatus] || 'Working…'
+                  : 'Help generate prompt'}
+              </button>
+            </div>
+            {assistantHint ? (
+              <p className="image-generate__assistant-hint" aria-live="polite">
+                {assistantHint}
+              </p>
+            ) : null}
+            {assistantError ? (
+              <p className="image-generate__error" role="alert">
+                {assistantError}
+              </p>
+            ) : null}
+          </div>
 
           {clientError ? <p className="image-generate__error">{clientError}</p> : null}
 
