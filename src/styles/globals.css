@@ -1525,6 +1525,44 @@ main {
   accent-color: #2563eb;
 }
 
+.image-generate__assistant {
+  margin-bottom: 1.25rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+}
+
+.image-generate__assistant-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.image-generate__assistant-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.image-generate__assistant-input:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.image-generate__assistant-hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: #15803d;
+}
+
 .image-generate__advanced {
   border: 1px solid #e2e8f0;
   border-radius: 0.7rem;

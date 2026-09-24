@@ -8,8 +8,19 @@ services:
     ports:
       - '3004:3000'
     command: ['npm', 'run', 'start']
+    networks:
+      - default
+      - gpu-gate
     labels:
       logging: 'loki'
       app: 'vietpolyglots'
       service: 'nextjs-app'
       environment: 'production'
+
+# Attach the app to the gpu-gate's private network so the prompt assistant's
+# backend can reach the loopback-only LLM gate (http://gpu-gate:8081) by service
+# name — off the public internet AND the LAN. See specs/008-prompt-assistant/research.md.
+networks:
+  gpu-gate:
+    external: true
+    name: gpu-gate_default
