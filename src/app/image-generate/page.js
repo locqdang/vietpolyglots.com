@@ -406,7 +406,7 @@ export default function ImageGeneratePage() {
 
       if (response.status === 202 && data?.jobId) {
         setAssistantStatus('queued');
-        setAssistantHint('Queued for the prompt-generation service…');
+        setAssistantHint('Queued for the assistant…');
         const deadline = Date.now() + 10 * 60 * 1000;
         let consecutivePollFailures = 0;
         while (Date.now() < deadline) {
@@ -477,11 +477,11 @@ export default function ImageGeneratePage() {
             : 'queued';
           setAssistantStatus(nextStatus);
           if (nextStatus === 'starting') {
-            setAssistantHint('Starting the prompt assistant…');
+            setAssistantHint('Setting things up…');
           } else if (nextStatus === 'waiting_for_gpu') {
-            setAssistantHint('Waiting for the GPU…');
+            setAssistantHint('Getting your prompt ready…');
           } else if (nextStatus === 'preparing_gpu') {
-            setAssistantHint('Preparing the prompt model…');
+            setAssistantHint('Loading the assistant…');
           } else if (nextStatus === 'processing') {
             setAssistantHint('Writing your prompt…');
           } else if (nextStatus === 'retrying') {
@@ -491,7 +491,7 @@ export default function ImageGeneratePage() {
               `Prompt attempt ${attempt} failed. Retrying automatically (${attempt}/${maximum})…`
             );
           } else {
-            setAssistantHint('Queued for the prompt-generation service…');
+            setAssistantHint('Queued for the assistant…');
           }
         }
         setAssistantStatus('failed');
@@ -638,9 +638,9 @@ export default function ImageGeneratePage() {
                   ? {
                       submitting: 'Queueing…',
                       queued: 'Queued…',
-                      starting: 'Starting…',
-                      waiting_for_gpu: 'Waiting for GPU…',
-                      preparing_gpu: 'Preparing model…',
+                      starting: 'Setting up…',
+                      waiting_for_gpu: 'Preparing…',
+                      preparing_gpu: 'Loading…',
                       processing: 'Writing…',
                       retrying: 'Retrying…',
                       reconnecting: 'Reconnecting…',
