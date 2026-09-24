@@ -25,10 +25,13 @@ export function getPromptAssistantConfig() {
   return {
     gateUrl: (process.env.LLM_GATE_URL || defaultLlmGateUrl()).replace(/\/+$/, ''),
     model: process.env.PROMPT_ASSISTANT_MODEL || 'Qwen3.8-27B-Uncensored-MTP-Q5_K_P',
-    // Qwen can take more than 90 seconds to cold-load after another GPU workload.
-    // Keep each queued attempt below the browser's 10-minute polling deadline while
-    // giving the gate enough time to acquire the GPU and finish one completion.
-    timeoutMs: positiveIntegerMs(process.env.PROMPT_ASSISTANT_TIMEOUT_MS, 300_000),
+    // Qwen can take a long time to cold-load after another GPU workload, and the
+    // gate holds the request in `waiting_for_gpu` for as long as the GPU cohort
+    // is busy (no max-wait). Each attempt must outlive a full drain or the app
+    // aborts while the gate keeps the work alive, discarding the result and
+    // piling a duplicate into the queue on retry. Keep it under the browser's
+    // 10-minute polling deadline.
+    timeoutMs: positiveIntegerMs(process.env.PROMPT_ASSISTANT_TIMEOUT_MS, 600_000),
     rateLimitMax: positiveInteger(process.env.PROMPT_ASSISTANT_RATE_LIMIT_MAX, 30),
     rateLimitWindowSeconds: positiveInteger(
       process.env.PROMPT_ASSISTANT_RATE_LIMIT_WINDOW_SECONDS,
