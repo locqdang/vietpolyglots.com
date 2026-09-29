@@ -20,7 +20,7 @@ export class PromptAssistantGateError extends Error {
 
 async function fetchWithTimeout(url, options = {}, timeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (error) {
@@ -32,7 +32,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs) {
       'Prompt generation service is temporarily unavailable. Please try again later.'
     );
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 

@@ -67,6 +67,24 @@ describe('image-generate worker processor', () => {
     expect(result.promptId).toBe('p-123');
   }, 10_000);
 
+  it('keeps polling a render after the former three-minute deadline', async () => {
+    submitImageGeneration.mockResolvedValue({ promptId: 'p-slow', seed: 7 });
+    getImageGenerationStatus.mockResolvedValue({
+      status: 'completed',
+      image: 'data:image/png;base64,AAAA',
+      promptId: 'p-slow',
+    });
+    const clock = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(200_000);
+    try {
+      await expect(
+        processGenerationJob({ jobId: 'img_slow', payload: { prompt: 'cat' } })
+      ).resolves.toMatchObject({ status: 'completed', promptId: 'p-slow' });
+      expect(failJob).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('records a user-safe error and re-throws when submission fails', async () => {
     submitImageGeneration.mockRejectedValue(
       new GateError(504, 'Generation timed out. Please try again.')

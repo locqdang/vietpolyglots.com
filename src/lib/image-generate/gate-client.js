@@ -20,7 +20,7 @@ function gateUrl() {
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = GATE_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (error) {
@@ -32,7 +32,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = GATE_TIMEOUT_MS) 
       'Image generation service is temporarily unavailable. Please try again later.'
     );
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -59,11 +59,15 @@ async function fetchImageDataUrl(baseUrl, imageUrl) {
 
 export async function submitImageGeneration(payload) {
   const base = gateUrl();
-  const response = await fetchWithTimeout(`${base}/api/chroma/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...payload, async: true }),
-  });
+  const response = await fetchWithTimeout(
+    `${base}/api/chroma/generate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, async: true }),
+    },
+    0
+  ); // The gate can wait for another cohort indefinitely before returning a prompt ID.
   const body = await parseGateJson(response);
   if (!response.ok || !body.prompt_id) {
     throw new GateError(

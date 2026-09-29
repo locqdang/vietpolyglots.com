@@ -5,10 +5,33 @@ import { getPromptAssistantConfig } from './prompt-assistant-config';
 import { generatePromptPair, PromptAssistantGateError } from './prompt-assistant-gate';
 import { parsePromptAssistantResponse } from './prompt-assistant-response';
 
-const QUEUE_NAME = 'prompt-assistant';
+// Queue name is namespaced by environment so the dev server and the production
+// container NEVER drain the same BullMQ queue. Both default to the same Redis,
+// so sharing one queue name lets the two workers steal each other's jobs — the
+// stale production worker then executes a dev job it can't track (no gate-stage
+// progress), leaving the dev UI stuck. Branching on NODE_ENV mirrors
+// defaultLlmGateUrl() and isolates dev without any env wiring.
+function queueName() {
+  const override = process.env.PROMPT_ASSISTANT_QUEUE_NAME;
+  if (override) return override;
+  return process.env.NODE_ENV === 'production' ? 'prompt-assistant' : 'prompt-assistant-dev';
+}
+
+const QUEUE_NAME = queueName();
 const DEFAULT_REDIS_URL = 'redis://192.168.0.62:6379/1';
 let queue;
 let worker;
+
+// Unique gate request id per *attempt*. The gate keeps the request alive (and
+// finishes it) even after our HTTP abort, so reusing the same id across retries
+// would let a timed-out attempt's late result or a still-queued duplicate
+// collide with the fresh attempt. One id per attempt keeps each gate request
+// independent; ids are alphanumeric + underscores, which the gate accepts.
+export function promptAssistantGateRequestId(job) {
+  const attempt = Number(job.attemptsMade) || 0;
+  const base = String(job.id).replace(/[^A-Za-z0-9_-]/g, '');
+  return attempt > 0 ? `${base}-a${attempt}` : base;
+}
 
 function connection() {
   return { url: process.env.REDIS_URL || DEFAULT_REDIS_URL };
@@ -51,7 +74,12 @@ async function readGateStage(requestId) {
 }
 
 export async function processPromptAssistantJob(job) {
-  const requestId = String(job.id);
+  // One gate request id per attempt, not per job: the gate keys its per-request
+  // state machine to this id, so reusing the same id across a BullMQ retry would
+  // have the status poller read the *previous* attempt's (already expired or
+  // terminal) record and the gate collide with the prior attempt's in-flight
+  // request. A fresh id per attempt keeps each attempt's gate state independent.
+  const requestId = promptAssistantGateRequestId(job);
   let stopped = false;
   const trackGateStage = async () => {
     if (stopped) return;
