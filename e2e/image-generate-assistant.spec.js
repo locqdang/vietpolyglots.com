@@ -96,6 +96,47 @@ test.describe('Services → Image Generate → Prompt Assistant', () => {
     expect(html).not.toMatch(/192\.168\.0\.62:8081/);
   });
 
+  test('resumes a queued prompt after refresh without submitting a duplicate', async ({
+    page,
+    request,
+  }) => {
+    let submissions = 0;
+    let finished = false;
+    await page.route(ASSISTANT_URL, (route) => {
+      submissions += 1;
+      route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ jobId: 'prompt_resume_e2e', status: 'queued' }),
+      });
+    });
+    await page.route('**/api/image/prompt/assistant/prompt_resume_e2e', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          finished
+            ? { status: 'completed', prompt: 'Recovered prompt', negativePrompt: 'blurry' }
+            : { status: 'waiting_for_gpu' }
+        ),
+      });
+    });
+    await signInWithMagicLink(page, request, {
+      email: 'e2e-prompt-resume@example.com',
+      redirectPath: '/image-generate',
+    });
+    await page.getByLabel(/Describe your idea/i).fill('a misty harbor');
+    await page.getByRole('button', { name: /Help generate prompt/i }).click({ force: true });
+    await expect(page.getByText('Queued for the assistant…')).toBeVisible();
+    await page.reload();
+    finished = true;
+    await expect(page.getByLabel('Describe your image')).toHaveValue('Recovered prompt');
+    expect(submissions).toBe(1);
+    expect(
+      await page.evaluate(() => sessionStorage.getItem('image-generate:prompt-assistant-job'))
+    ).toBeNull();
+  });
+
   test('on a failed assistant call shows an error, leaves fields unchanged, and re-enables', async ({
     page,
     request,

@@ -50,8 +50,9 @@ export async function processGenerationJob(jobData) {
       'image-gen worker: submitted'
     );
 
-    const deadline = Date.now() + 180_000;
-    while (Date.now() < deadline) {
+    // Once admitted, keep checking the gate's real terminal state. A render can
+    // take longer than the old 3-minute local deadline without being a failure.
+    while (true) {
       const status = await getImageGenerationStatus(submitted.promptId);
       if (status.status === 'completed') {
         const result = { ...status, seed: submitted.seed };
@@ -67,7 +68,6 @@ export async function processGenerationJob(jobData) {
       }
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-    throw new GateError(504, 'Generation timed out. Please try again.');
   } catch (error) {
     const message =
       error instanceof GateError
@@ -91,8 +91,8 @@ export function getQueue() {
     queue = new Queue(QUEUE_NAME, {
       connection: { url: redisUrl() },
       defaultJobOptions: {
-        // One retry on a transient gate failure, then fail. The gate blocks for a
-        // long time, so keep the timeout generous.
+        // Retry transient submission errors. Queue waits themselves have no
+        // local timeout, so they do not generate duplicate work on retry.
         attempts: 2,
         removeOnComplete: { age: 24 * 60 * 60 },
         removeOnFail: { age: 24 * 60 * 60 },
