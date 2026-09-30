@@ -62,9 +62,10 @@ export async function generatePromptPair(
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
   if (requestId) headers['X-GPU-Gate-Request-ID'] = requestId;
 
+  // Keep this image-prompt assistant on slot 1, separate from Hermes on slot 0.
   const response = await fetchWithTimeout(
     `${base}/v1/chat/completions`,
-    { method: 'POST', headers, body: JSON.stringify(request) },
+    { method: 'POST', headers, body: JSON.stringify({ ...request, id_slot: 1 }) },
     config.timeoutMs
   );
   const body = await parseJson(response);

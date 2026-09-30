@@ -34,6 +34,23 @@ describe('GPU gate long queue waits', () => {
     await expect(pending).resolves.toBe('done');
   });
 
+  it('pins the image prompt assistant LLM call to slot 1', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'done' } }] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const request = { model: 'test', messages: [], id_slot: 0 };
+    const config = { gateUrl: 'http://gpu-gate:8081', timeoutMs: 0, apiKey: '' };
+
+    await expect(generatePromptPair(request, config, 'job-1')).resolves.toBe('done');
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://gpu-gate:8081/v1/chat/completions');
+    expect(JSON.parse(options.body)).toMatchObject({ model: 'test', id_slot: 1 });
+    expect(options.headers['X-GPU-Gate-Request-ID']).toBe('job-1');
+    expect(request.id_slot).toBe(0);
+  });
+
   it('defaults to waiting for the result unless an explicit positive timeout is configured', () => {
     const previous = process.env.PROMPT_ASSISTANT_TIMEOUT_MS;
     try {
