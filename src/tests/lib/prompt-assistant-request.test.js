@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { getPromptAssistantConfig } from '../../lib/image-generate/prompt-assistant-config';
 import {
   buildPromptAssistantRequest,
   SYSTEM_PROMPT,
@@ -7,11 +8,24 @@ import {
 // A config override keeps these tests deterministic and independent of the env.
 const cfg = {
   gateUrl: 'http://gpu-gate:8081',
-  model: 'Qwen3.8-27B-Uncensored-MTP-Q5_K_P',
+  model: 'Qwen3.8-27B-Q5_K_M',
   timeoutMs: 90_000,
   maxIdea: 1000,
   maxPrompt: 2000,
 };
+
+describe('prompt assistant model configuration', () => {
+  it('defaults to the requested model and passes it into the request', () => {
+    vi.stubEnv('PROMPT_ASSISTANT_MODEL', '');
+    try {
+      const config = getPromptAssistantConfig();
+      expect(config.model).toBe('Qwen3.8-27B-Q5_K_M');
+      expect(buildPromptAssistantRequest('a cat', config).request.model).toBe(config.model);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
 
 describe('buildPromptAssistantRequest (prompt-injection safety)', () => {
   it('places the idea ONLY in the user message', () => {
@@ -35,7 +49,7 @@ describe('buildPromptAssistantRequest (prompt-injection safety)', () => {
     const result = buildPromptAssistantRequest('a cat', cfg);
     expect(result.ok).toBe(true);
     expect(result.request.messages[0].content).toBe(SYSTEM_PROMPT);
-    expect(result.request.model).toBe('Qwen3.8-27B-Uncensored-MTP-Q5_K_P');
+    expect(result.request.model).toBe('Qwen3.8-27B-Q5_K_M');
     expect(result.request.response_format).toEqual({ type: 'json_object' });
     expect(result.request.stream).toBe(false);
   });

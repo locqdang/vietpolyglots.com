@@ -24,7 +24,7 @@ function defaultLlmGateUrl() {
 export function getPromptAssistantConfig() {
   return {
     gateUrl: (process.env.LLM_GATE_URL || defaultLlmGateUrl()).replace(/\/+$/, ''),
-    model: process.env.PROMPT_ASSISTANT_MODEL || 'Qwen3.8-27B-Uncensored-MTP-Q5_K_P',
+    model: process.env.PROMPT_ASSISTANT_MODEL || 'Qwen3.8-27B-Q5_K_M',
     // The gate has no queue-wait limit. Do not abort an admitted request while
     // it is still waiting for another cohort, or retrying creates duplicate work.
     // A positive override remains available for installations with a known bound.
