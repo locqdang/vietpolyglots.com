@@ -62,7 +62,8 @@ export async function generatePromptPair(
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
   if (requestId) headers['X-GPU-Gate-Request-ID'] = requestId;
 
-  // Keep this image-prompt assistant on slot 1, separate from Hermes on slot 0.
+  // Keep the image-prompt assistant pinned to slot 1 of its (uncensored) model
+  // instance; Hermes stays on slot 0 of the base Qwen model.
   const response = await fetchWithTimeout(
     `${base}/v1/chat/completions`,
     { method: 'POST', headers, body: JSON.stringify({ ...request, id_slot: 1 }) },
