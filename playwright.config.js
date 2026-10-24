@@ -1,5 +1,15 @@
 const { defineConfig } = require('@playwright/test');
 
+// Headless Chromium ties compositor BeginFrames to the X display when
+// DISPLAY is set. On workstations where that display's vsync source is
+// unavailable (idle/locked sessions, multi-GPU setups) requestAnimationFrame
+// never fires, so Playwright's "stable" actionability check hangs and every
+// .click() times out. Run the headless suite without DISPLAY. No-op on CI,
+// which has no DISPLAY set anyway.
+if (!process.argv.includes('--headed')) {
+  delete process.env.DISPLAY;
+}
+
 module.exports = defineConfig({
   testDir: './e2e',
   fullyParallel: false,
